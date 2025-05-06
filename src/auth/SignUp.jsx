@@ -335,7 +335,7 @@ const SignUp = () => {
               Register
             </button>
           </div>
-          <div className="flex justify-between text-emerald-500 mt-2 underline">
+          <div className="flex justify-between text-emerald-500 mt-2 underline text-sm">
             <a href="/login">Login</a>
             <a href="/">Create a Staff or Admin account</a>
           </div>
