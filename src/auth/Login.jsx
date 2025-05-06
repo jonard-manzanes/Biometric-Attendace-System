@@ -98,9 +98,9 @@ const Login = () => {
     const init = async () => {
       try {
         await Promise.all([
-          // faceapi.nets.tinyFaceDetector.loadFromUri('/models/tiny_face_detector_model'),
-          // faceapi.nets.faceLandmark68Net.loadFromUri('/models/face_landmark_68_model'),
-          // faceapi.nets.faceRecognitionNet.loadFromUri('/models/face_recognition_model'),
+          faceapi.nets.tinyFaceDetector.loadFromUri('/models/tiny_face_detector_model'),
+          faceapi.nets.faceLandmark68Net.loadFromUri('/models/face_landmark_68_model'),
+          faceapi.nets.faceRecognitionNet.loadFromUri('/models/face_recognition_model'),
         ]);
 
         const stream = await navigator.mediaDevices.getUserMedia({ video: true });
