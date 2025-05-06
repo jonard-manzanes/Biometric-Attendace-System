@@ -60,8 +60,14 @@ const Login = () => {
             localStorage.setItem('user', JSON.stringify({
               ...userData,
               fullName,
-              id: match.label
+              id: match.label,
+              docId: userData.docId // Store the Firestore document ID
             }));
+            
+            // Save studentId separately if available
+            if (userData.role === 'student' && userData.studentId) {
+              localStorage.setItem('studentId', userData.studentId);
+            }
 
             Swal.fire({
               icon: 'success',
@@ -121,7 +127,8 @@ const Login = () => {
             );
             userMap[label] = {
               ...data,
-              id: label
+              id: label,
+              docId: doc.id // Store the Firestore document ID
             };
           }
         });
@@ -189,7 +196,6 @@ const Login = () => {
         <>
           <p className="mt-4 text-center text-sm text-emerald-200">{status}</p>
 
-          
           {showRetry && (
             <div className="flex justify-center mt-4">
               <button
@@ -199,14 +205,12 @@ const Login = () => {
               >
                 {isScanning ? 'Scanning...' : 'Try Again'}
               </button>
-
             </div>
           )}
 
-          <div className='text-center text-white mt-2' >
-              <p>No account? <a className='underline text-emerald-400' href='/signup'>Register</a></p>
-            </div>
-
+          <div className='text-center text-white'>
+            <p>No account? <a className='underline text-emerald-400' href='/signup'>Register</a></p>
+          </div>
         </>
       )}
     </div>
