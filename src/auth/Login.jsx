@@ -98,9 +98,9 @@ const Login = () => {
     const init = async () => {
       try {
         await Promise.all([
-          faceapi.nets.tinyFaceDetector.loadFromUri('/models/tiny_face_detector_model'),
-          faceapi.nets.faceLandmark68Net.loadFromUri('/models/face_landmark_68_model'),
-          faceapi.nets.faceRecognitionNet.loadFromUri('/models/face_recognition_model'),
+          // faceapi.nets.tinyFaceDetector.loadFromUri('/models/tiny_face_detector_model'),
+          // faceapi.nets.faceLandmark68Net.loadFromUri('/models/face_landmark_68_model'),
+          // faceapi.nets.faceRecognitionNet.loadFromUri('/models/face_recognition_model'),
         ]);
 
         const stream = await navigator.mediaDevices.getUserMedia({ video: true });
@@ -162,9 +162,9 @@ const Login = () => {
 
   return (
     <div className="min-h-screen flex flex-col justify-center items-center gap-2 bg-emerald-800">
-      <h1 className="text-2xl font-bold text-emerald-200 underline">BIO TRACK</h1>
-      <div className="relative">
-        <div className="w-64 h-64 rounded-full overflow-hidden border-4 border-green-500 shadow-lg">
+      <h1 className="text-2xl font-bold text-emerald-200 animate-bounce">BIO TRACK</h1>
+      <div className="relative mt-5">
+        <div className="w-100 h-100 rounded-full overflow-hidden border-4 border-green-500 shadow-lg">
           <video 
             ref={videoRef} 
             autoPlay 
@@ -175,7 +175,7 @@ const Login = () => {
         
         {isScanning && (
           <div className="absolute inset-0 flex items-center justify-center">
-            <div className="w-72 h-72 rounded-full border-4 border-emerald-400 border-t-transparent animate-spin"></div>
+            <div className="w-90 h-90 rounded-full border-4 border-emerald-400 border-t-transparent animate-spin"></div>
           </div>
         )}
       </div>
