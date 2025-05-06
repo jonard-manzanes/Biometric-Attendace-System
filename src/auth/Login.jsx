@@ -43,25 +43,41 @@ const Login = () => {
 
           if (match.label !== 'unknown') {
             clearScanning();
-            const role = userMapRef.current[match.label] || 'student';
-            const userData = { name: match.label, role };
-            localStorage.setItem('user', JSON.stringify(userData));
+            const userData = userMapRef.current[match.label];
+            
+            // Handle all three roles
+            let redirectPath = '/dashboard';
+            if (userData.role === 'admin') {
+              redirectPath = '/admin/dashboard';
+            } else if (userData.role === 'teacher') {
+              redirectPath = '/teacher/dashboard';
+            } else {
+              redirectPath = '/student/dashboard';
+            }
+
+            const fullName = `${userData.firstName} ${userData.middleInitial ? userData.middleInitial + ' ' : ''}${userData.lastName}`;
+            
+            localStorage.setItem('user', JSON.stringify({
+              ...userData,
+              fullName,
+              id: match.label
+            }));
 
             Swal.fire({
               icon: 'success',
-              title: `Welcome, ${match.label}`,
-              text: `Role: ${role}`,
+              title: `Welcome, ${fullName}`,
+              text: `Role: ${userData.role.toUpperCase()}`,
               timer: 2500,
               showConfirmButton: false,
               didClose: () => {
-                window.location.href = `/${role}/dashboard`;
+                window.location.href = redirectPath;
               },
             });
           } else {
             clearScanning();
             setShowRetry(true);
             setStatus('Face not recognized. Please try again.');
-            await new Promise(resolve => setTimeout(resolve, 1000)); // 1 second delay
+            await new Promise(resolve => setTimeout(resolve, 1000));
             Swal.fire({
               icon: 'error',
               title: 'Face Not Recognized',
@@ -75,7 +91,7 @@ const Login = () => {
         setShowRetry(true);
         setStatus('Error during face detection');
       }
-    }, 5000); // Increased interval to 5 seconds to reduce frequency
+    }, 5000);
   };
 
   useEffect(() => {
@@ -96,12 +112,17 @@ const Login = () => {
 
         snapshot.forEach((doc) => {
           const data = doc.data();
-          if (typeof data.name === 'string' && Array.isArray(data.descriptor)) {
+          if (Array.isArray(data.descriptor)) {
             const descriptor = new Float32Array(data.descriptor);
+            // Use studentId for students, email for admin/teacher as label
+            const label = data.studentId || data.email;
             labeledDescriptors.push(
-              new faceapi.LabeledFaceDescriptors(data.name, [descriptor])
+              new faceapi.LabeledFaceDescriptors(label, [descriptor])
             );
-            userMap[data.name] = data.role || 'student';
+            userMap[label] = {
+              ...data,
+              id: label
+            };
           }
         });
 
@@ -140,23 +161,43 @@ const Login = () => {
   }, []);
 
   return (
-    <div className="p-4">
-      <h1 className="text-xl font-bold mb-2">Face Login</h1>
-      <video ref={videoRef} autoPlay muted width="320" height="240" className="rounded shadow" />
+    <div className="min-h-screen flex flex-col justify-center items-center gap-2 bg-emerald-800">
+      <h1 className="text-2xl font-bold text-emerald-200 underline">BIO TRACK</h1>
+      <div className="relative">
+        <div className="w-64 h-64 rounded-full overflow-hidden border-4 border-green-500 shadow-lg">
+          <video 
+            ref={videoRef} 
+            autoPlay 
+            muted 
+            className="w-full h-full object-cover"
+          />
+        </div>
+        
+        {isScanning && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="w-72 h-72 rounded-full border-4 border-emerald-400 border-t-transparent animate-spin"></div>
+          </div>
+        )}
+      </div>
 
       {loading ? (
-        <p className="mt-2 text-gray-500">Loading models and camera...</p>
+        <div className="flex flex-col items-center mt-4">
+          <div className="w-8 h-8 border-4 border-emerald-300 border-t-transparent rounded-full animate-spin mb-2"></div>
+          <p className="text-center text-emerald-200">Loading models and camera...</p>
+        </div>
       ) : (
         <>
-          <p className="mt-2 text-sm text-gray-600">{status}</p>
+          <p className="mt-4 text-center text-sm text-emerald-200">{status}</p>
           {showRetry && (
-            <button
-              onClick={startScanning}
-              className="mt-2 px-4 py-2 bg-blue-500 text-white rounded"
-              disabled={isScanning}
-            >
-              {isScanning ? 'Scanning...' : 'Try Again'}
-            </button>
+            <div className="flex justify-center mt-4">
+              <button
+                onClick={startScanning}
+                className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-full shadow transition-colors"
+                disabled={isScanning}
+              >
+                {isScanning ? 'Scanning...' : 'Try Again'}
+              </button>
+            </div>
           )}
         </>
       )}

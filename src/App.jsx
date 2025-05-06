@@ -3,9 +3,11 @@ import Login from './auth/Login';
 import SignUp from './auth/SignUp';
 import ProtectedRoute from './auth/ProtectedRoute';
 
-
-
+import StudentLayout from './student/StudentLayout'; // ✅ Import layout
 import StudentDashboard from './student/Dashboard';
+import StudentAttendance from './student/Attendance';
+import StudentProfile from './student/Profile';
+
 import TeacherDashboard from './teacher/Dashboard';
 import AdminDashboard from './admin/Dashboard';
 
@@ -17,15 +19,21 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<SignUp />} />
 
+        {/* ✅ Student Routes with layout */}
         <Route
-          path="/student/dashboard"
+          path="/student"
           element={
             <ProtectedRoute role="student">
-              <StudentDashboard />
+              <StudentLayout />
             </ProtectedRoute>
           }
-        />
+        >
+          <Route path="dashboard" element={<StudentDashboard />} />
+          <Route path="attendance" element={<StudentAttendance />} />
+          <Route path="profile" element={<StudentProfile />} />
+        </Route>
 
+        {/* ✅ Other Roles */}
         <Route
           path="/teacher/dashboard"
           element={
@@ -34,7 +42,6 @@ function App() {
             </ProtectedRoute>
           }
         />
-
         <Route
           path="/admin/dashboard"
           element={
