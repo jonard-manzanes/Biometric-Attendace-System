@@ -35,8 +35,11 @@ export default function StudentLayout() {
       cancelButtonText: "Cancel",
     }).then((result) => {
       if (result.isConfirmed) {
-        // Perform logout action here
-        localStorage.removeItem("token");
+
+        localStorage.removeItem("user");
+        localStorage.removeItem("userDocId");
+        localStorage.removeItem("currentUserId");
+        localStorage.removeItem("studentId");
         navigate("/login");
       }
     });
@@ -62,10 +65,17 @@ export default function StudentLayout() {
             {sidebarOpen ? (
               <>
                 <div>
-                  <h1 className="text-xl font-bold text-emerald-200">BIO-TRACK</h1>
-                  <p className="text-sm opacity-75">Biometric Attendance System</p>
+                  <h1 className="text-xl font-bold text-emerald-200">
+                    BIO-TRACK
+                  </h1>
+                  <p className="text-sm opacity-75">
+                    Biometric Attendance System
+                  </p>
                 </div>
-                <button onClick={toggleSidebar} className="text-white hover:text-emerald-200">
+                <button
+                  onClick={toggleSidebar}
+                  className="text-white hover:text-emerald-200"
+                >
                   <Menu size={20} />
                 </button>
               </>
@@ -117,7 +127,9 @@ export default function StudentLayout() {
 
       {/* Main Content */}
       <div
-        className={`flex-1 ${!sidebarOpen && "md:ml-0"} transition-all duration-300 ease-in-out`}
+        className={`flex-1 ${
+          !sidebarOpen && "md:ml-0"
+        } transition-all duration-300 ease-in-out`}
       >
         <header className="bg-white shadow-sm">
           <div className="flex justify-between items-center px-4 md:px-6 py-3">

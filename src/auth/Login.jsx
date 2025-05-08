@@ -22,7 +22,6 @@ const Login = () => {
     setIsScanning(false);
   };
 
-  
   const startScanning = () => {
     if (isScanning) return;
     
@@ -46,7 +45,6 @@ const Login = () => {
             clearScanning();
             const userData = userMapRef.current[match.label];
             
-            // Handle all three roles
             let redirectPath = '/dashboard';
             if (userData.role === 'admin') {
               redirectPath = '/admin/dashboard';
@@ -58,14 +56,18 @@ const Login = () => {
 
             const fullName = `${userData.firstName} ${userData.middleInitial ? userData.middleInitial + ' ' : ''}${userData.lastName}`;
             
-            localStorage.setItem('user', JSON.stringify({
+            // Store all user data including docId
+            const userToStore = {
               ...userData,
               fullName,
               id: match.label,
-              docId: userData.docId // Store the Firestore document ID
-            }));
-            
-            // Save studentId separately if available
+              docId: userData.docId
+            };
+
+            localStorage.setItem('user', JSON.stringify(userToStore));
+            localStorage.setItem('userDocId', userData.docId);
+            localStorage.setItem('currentUserId', userData.uid || userData.docId);
+
             if (userData.role === 'student' && userData.studentId) {
               localStorage.setItem('studentId', userData.studentId);
             }
@@ -101,8 +103,6 @@ const Login = () => {
     }, 5000);
   };
 
-  
-
   useEffect(() => {
     const init = async () => {
       try {
@@ -123,7 +123,6 @@ const Login = () => {
           const data = doc.data();
           if (Array.isArray(data.descriptor)) {
             const descriptor = new Float32Array(data.descriptor);
-            // Use studentId for students, email for admin/teacher as label
             const label = data.studentId || data.email;
             labeledDescriptors.push(
               new faceapi.LabeledFaceDescriptors(label, [descriptor])
@@ -131,7 +130,8 @@ const Login = () => {
             userMap[label] = {
               ...data,
               id: label,
-              docId: doc.id // Store the Firestore document ID
+              docId: doc.id,
+              uid: data.uid || doc.id // Store both uid and docId
             };
           }
         });
