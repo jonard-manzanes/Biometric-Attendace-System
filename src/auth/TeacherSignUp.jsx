@@ -12,47 +12,26 @@ import {
   doc,
 } from "firebase/firestore";
 
-const SignUp = () => {
+const TeacherSignUp = () => {
   const videoRef = useRef();
   const canvasRef = useRef();
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
-  const [studentId, setStudentId] = useState("");
-  const [course, setCourse] = useState("");
-  const [year, setYear] = useState("");
+  const [employeeId, setEmployeeId] = useState("");
   const [status, setStatus] = useState("Initializing...");
-  const role = "student";
-
-  const courses = [
-    "Computer Science",
-    "Information Technology",
-    "Engineering",
-    "Business Administration",
-    "Psychology",
-    "Nursing",
-  ];
-
-  const years = ["1st Year", "2nd Year", "3rd Year", "4th Year", "5th Year"];
+  const role = "teacher";
 
   useEffect(() => {
     const initModelsAndVideo = async () => {
       try {
         setStatus("Loading models...");
         await Promise.all([
-          faceapi.nets.tinyFaceDetector.loadFromUri(
-            "/models/tiny_face_detector_model"
-          ),
-          faceapi.nets.faceLandmark68Net.loadFromUri(
-            "/models/face_landmark_68_model"
-          ),
-          faceapi.nets.faceRecognitionNet.loadFromUri(
-            "/models/face_recognition_model"
-          ),
+          faceapi.nets.tinyFaceDetector.loadFromUri("/models/tiny_face_detector_model"),
+          faceapi.nets.faceLandmark68Net.loadFromUri("/models/face_landmark_68_model"),
+          faceapi.nets.faceRecognitionNet.loadFromUri("/models/face_recognition_model"),
         ]);
 
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: true,
-        });
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
         videoRef.current.srcObject = stream;
         setStatus("Models loaded. Ready to register.");
       } catch (error) {
@@ -76,11 +55,8 @@ const SignUp = () => {
     return canvas.toDataURL("image/jpeg");
   };
 
-  const checkIfStudentExists = async (studentId) => {
-    const q = query(
-      collection(db, "users"),
-      where("studentId", "==", studentId)
-    );
+  const checkIfEmployeeExists = async (employeeId) => {
+    const q = query(collection(db, "users"), where("studentId", "==", employeeId));
     const querySnapshot = await getDocs(q);
     return querySnapshot.empty ? null : querySnapshot.docs[0];
   };
@@ -91,10 +67,7 @@ const SignUp = () => {
 
     for (const doc of querySnapshot.docs) {
       const existingDescriptor = doc.data().descriptor;
-      const distance = faceapi.euclideanDistance(
-        descriptor,
-        existingDescriptor
-      );
+      const distance = faceapi.euclideanDistance(descriptor, existingDescriptor);
       if (distance < 0.6) {
         return true;
       }
@@ -105,13 +78,7 @@ const SignUp = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (
-      !firstName.trim() ||
-      !lastName.trim() ||
-      !studentId.trim() ||
-      !course ||
-      !year
-    ) {
+    if (!firstName.trim() || !lastName.trim() || !employeeId.trim()) {
       Swal.fire({
         icon: "warning",
         title: "Missing Information",
@@ -135,10 +102,7 @@ const SignUp = () => {
     try {
       const detection = await Promise.race([
         faceapi
-          .detectSingleFace(
-            videoRef.current,
-            new faceapi.TinyFaceDetectorOptions()
-          )
+          .detectSingleFace(videoRef.current, new faceapi.TinyFaceDetectorOptions())
           .withFaceLandmarks()
           .withFaceDescriptor(),
         timeout,
@@ -154,35 +118,31 @@ const SignUp = () => {
       }
 
       const descriptor = Array.from(detection.descriptor);
-
       const faceExists = await checkIfFaceExists(descriptor);
       if (faceExists) {
         Swal.fire({
           icon: "error",
           title: "Face Already Registered",
-          text: "This face has already been registered in our system. Please contact support if this is an error.",
+          text: "This face has already been registered in our system.",
         });
         return;
       }
 
       const snapshot = captureSnapshot();
-      const existingStudentDoc = await checkIfStudentExists(studentId);
+      const existingEmployeeDoc = await checkIfEmployeeExists(employeeId);
 
-      if (existingStudentDoc) {
-        const existingStudent = existingStudentDoc.data();
+      if (existingEmployeeDoc) {
+        const existingEmployee = existingEmployeeDoc.data();
 
-        if (
-          existingStudent.descriptor &&
-          existingStudent.descriptor.length > 0
-        ) {
+        if (existingEmployee.descriptor && existingEmployee.descriptor.length > 0) {
           Swal.fire({
             icon: "error",
             title: "Account Already Registered",
-            text: "This student ID is already registered with a face.",
+            text: "This employee ID is already registered with a face.",
           });
           return;
         } else {
-          const userRef = doc(db, "users", existingStudentDoc.id);
+          const userRef = doc(db, "users", existingEmployeeDoc.id);
           await updateDoc(userRef, {
             descriptor,
             image: snapshot,
@@ -198,9 +158,7 @@ const SignUp = () => {
         await addDoc(collection(db, "users"), {
           firstName,
           lastName,
-          studentId,
-          course,
-          year,
+          studentId: employeeId,
           role,
           descriptor,
           image: snapshot,
@@ -210,18 +168,14 @@ const SignUp = () => {
         Swal.fire({
           icon: "success",
           title: "Registration Successful",
-          text: "You have been successfully registered as a student.",
+          text: "You have been successfully registered as a teacher.",
         });
       }
 
-      setStatus("Student registered successfully!");
-
-      // Reset form
+      setStatus("Teacher registered successfully!");
       setFirstName("");
       setLastName("");
-      setStudentId("");
-      setCourse("");
-      setYear("");
+      setEmployeeId("");
     } catch (error) {
       console.error(error);
       Swal.fire({
@@ -232,56 +186,11 @@ const SignUp = () => {
     }
   };
 
-
-  const inviteCode = () => {
-    Swal.fire({
-      title: 'Enter University Code',
-      text: 'Please enter the code provided by your university.',
-      input: 'text',
-      showCancelButton: true,
-      confirmButtonText: 'Submit',
-      cancelButtonText: 'Cancel',
-      preConfirm: (codeprovided) => {
-        if (!codeprovided) {
-          Swal.showValidationMessage('Please enter a code');
-          return false;
-        }
-  
-        const codeNumber = Number(codeprovided);
-        if (isNaN(codeNumber)) {
-          Swal.showValidationMessage('Please enter a valid numeric code');
-          return false;
-        }
-  
-        const uniCode = collection(db, "UniversityCode");
-        const q = query(uniCode, where("InviteCode", "==", codeNumber));
-  
-        return getDocs(q)
-          .then((querySnapshot) => {
-            if (querySnapshot.empty) {
-              Swal.showValidationMessage('Invalid code provided');
-              return false;
-            }
-  
-            window.location.href = "/teacher-signup";
-          })
-          .catch((error) => {
-            console.error("Error checking code: ", error);
-            Swal.showValidationMessage('Error checking code');
-          });
-      },
-    });
-  };
-  
-  
-
-
-  
   return (
     <div className="min-h-screen bg-emerald-800 flex justify-center items-center px-4">
       <div className="w-full max-w-4xl bg-white/10 p-6 md:p-10 rounded-xl shadow-lg backdrop-blur-2xl">
-        <h1 className="text-emerald-200 text-2xl md:text-3xl text-center mb-6 font-bold animate-bounce">
-          Student Registration
+        <h1 className="text-emerald-200 text-2xl md:text-3xl text-center mb-6 font-bold">
+          Teacher Registration
         </h1>
 
         <form onSubmit={handleSubmit}>
@@ -311,51 +220,15 @@ const SignUp = () => {
           </div>
 
           <div className="flex flex-col mb-4">
-            <label className="text-white">Student ID*</label>
+            <label className="text-white">Employee ID*</label>
             <input
               type="text"
-              placeholder="Student ID"
-              value={studentId}
-              onChange={(e) => setStudentId(e.target.value)}
+              placeholder="Employee ID"
+              value={employeeId}
+              onChange={(e) => setEmployeeId(e.target.value)}
               className="mt-1 px-4 py-2 border border-green-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-700"
               required
             />
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-            <div className="flex flex-col">
-              <label className="text-white">Course*</label>
-              <select
-                value={course}
-                onChange={(e) => setCourse(e.target.value)}
-                className="mt-1 px-4 py-2 border border-green-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-700"
-                required
-              >
-                <option value="">Select Course</option>
-                {courses.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="flex flex-col">
-              <label className="text-white">Year*</label>
-              <select
-                value={year}
-                onChange={(e) => setYear(e.target.value)}
-                className="mt-1 px-4 py-2 border border-green-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-700"
-                required
-              >
-                <option value="">Select Year</option>
-                {years.map((y) => (
-                  <option key={y} value={y}>
-                    {y}
-                  </option>
-                ))}
-              </select>
-            </div>
           </div>
 
           <div className="flex justify-center mb-4">
@@ -383,10 +256,6 @@ const SignUp = () => {
           </div>
           <div className="flex justify-between text-emerald-500 mt-2 text-sm">
             <a href="/login">Login</a>
-            <button
-              onClick={inviteCode}
-              className="text-emerald-500 hover:underline"
-              >Cerate Accrount teacher</button>
           </div>
         </form>
       </div>
@@ -394,4 +263,4 @@ const SignUp = () => {
   );
 };
 
-export default SignUp;
+export default TeacherSignUp;

@@ -1,6 +1,7 @@
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import Login from "./auth/Login";
 import SignUp from "./auth/SignUp";
+import TeacherSignUp from "./auth/TeacherSignUp";
 import ProtectedRoute from "./auth/ProtectedRoute";
 
 import StudentLayout from "./student/StudentLayout";
@@ -22,6 +23,7 @@ function App() {
         <Route path="/" element={<Login />} />
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<SignUp />} />
+        <Route path="/teacher-signup" element={<TeacherSignUp />} />
 
         {/* ✅ Student Routes with layout */}
         <Route

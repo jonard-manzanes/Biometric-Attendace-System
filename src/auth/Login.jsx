@@ -22,6 +22,7 @@ const Login = () => {
     setIsScanning(false);
   };
 
+  
   const startScanning = () => {
     if (isScanning) return;
     
@@ -99,6 +100,8 @@ const Login = () => {
       }
     }, 5000);
   };
+
+  
 
   useEffect(() => {
     const init = async () => {

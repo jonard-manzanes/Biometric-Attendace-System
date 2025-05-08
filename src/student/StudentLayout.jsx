@@ -2,6 +2,8 @@ import React, { useState } from "react";
 import { Bell, Home, CalendarCheck, User, LogOut, Menu } from "lucide-react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 
+import Swal from "sweetalert2";
+
 export default function StudentLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
@@ -24,8 +26,20 @@ export default function StudentLayout() {
   };
 
   const handleLogout = () => {
-    alert("Logged out");
-    window.location.href = "/login";
+    Swal.fire({
+      title: "Are you sure?",
+      text: "You will be logged out of your account.",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Yes, log out",
+      cancelButtonText: "Cancel",
+    }).then((result) => {
+      if (result.isConfirmed) {
+        // Perform logout action here
+        localStorage.removeItem("token");
+        navigate("/login");
+      }
+    });
   };
 
   return (
