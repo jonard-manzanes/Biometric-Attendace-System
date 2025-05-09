@@ -58,9 +58,9 @@ const Attendance = () => {
     };
   }, [showFaceModal, modelsLoaded]);
 
-  // Fetch subjects data
+  // Fetch subjects data and attendance status
   useEffect(() => {
-    const fetchSubjects = async () => {
+    const fetchSubjectsAndAttendance = async () => {
       try {
         const studentID = localStorage.getItem("userDocId");
         const querySnapshot = await getDocs(collection(db, "classes"));
@@ -90,10 +90,28 @@ const Attendance = () => {
             };
           });
 
+          // Check attendance status for this subject
+          const now = new Date();
+          const today = now.toISOString().split("T")[0];
+          const classID = subject.joinCode || subject.subjectName.replace(/\s/g, "_");
+          const attendanceRef = doc(db, "attendance", classID, today, studentID);
+          const attendanceSnap = await getDoc(attendanceRef);
+
+          let status = 'none';
+          if (attendanceSnap.exists()) {
+            const data = attendanceSnap.data();
+            if (data.timeIn && data.timeOut) {
+              status = 'completed';
+            } else if (data.timeIn) {
+              status = 'timeIn';
+            }
+          }
+
           return {
             ...subject,
             teacherName,
             schedule: scheduleWith12HourFormat,
+            attendanceStatus: status
           };
         });
 
@@ -104,7 +122,7 @@ const Attendance = () => {
       }
     };
 
-    fetchSubjects();
+    fetchSubjectsAndAttendance();
   }, []);
 
   const startCamera = async () => {
@@ -168,6 +186,8 @@ const Attendance = () => {
               
               setTimeout(() => {
                 setShowFaceModal(false);
+                // Refresh attendance status after marking
+                fetchSubjectsAndAttendance();
               }, 1500);
             } else {
               setVerificationStatus('Face not recognized. Please try again.');
@@ -297,6 +317,68 @@ const Attendance = () => {
     return hours * 60 + minutes;
   };
 
+  const fetchSubjectsAndAttendance = async () => {
+    try {
+      const studentID = localStorage.getItem("userDocId");
+      const querySnapshot = await getDocs(collection(db, "classes"));
+      const fetchedSubjects = querySnapshot.docs
+        .map((doc) => ({ id: doc.id, ...doc.data() }))
+        .filter((subject) => subject.studentIDs?.includes(studentID)); 
+
+      const teacherPromises = fetchedSubjects.map(async (subject) => {
+        const teacherRef = doc(db, "users", subject.teacherID);
+        const teacherDoc = await getDoc(teacherRef);
+
+        let teacherName = "Unknown Teacher";
+        if (teacherDoc.exists()) {
+          const data = teacherDoc.data();
+          if (data.role === "teacher") {
+            teacherName = `${data.firstName} ${
+              data.middle ? data.middle + " " : ""
+            }${data.lastName}`;
+          }
+        }
+
+        const scheduleWith12HourFormat = subject.schedule?.map((sched) => {
+          return {
+            ...sched,
+            start: convertTo12HourFormat(sched.start),
+            end: convertTo12HourFormat(sched.end),
+          };
+        });
+
+        // Check attendance status for this subject
+        const now = new Date();
+        const today = now.toISOString().split("T")[0];
+        const classID = subject.joinCode || subject.subjectName.replace(/\s/g, "_");
+        const attendanceRef = doc(db, "attendance", classID, today, studentID);
+        const attendanceSnap = await getDoc(attendanceRef);
+
+        let status = 'none';
+        if (attendanceSnap.exists()) {
+          const data = attendanceSnap.data();
+          if (data.timeIn && data.timeOut) {
+            status = 'completed';
+          } else if (data.timeIn) {
+            status = 'timeIn';
+          }
+        }
+
+        return {
+          ...subject,
+          teacherName,
+          schedule: scheduleWith12HourFormat,
+          attendanceStatus: status
+        };
+      });
+
+      const mappedSubjects = await Promise.all(teacherPromises);
+      setSubjects(mappedSubjects);
+    } catch (error) {
+      console.error("Error fetching subjects: ", error);
+    }
+  };
+
   const AttendanceCard = ({
     subject,
     index,
@@ -305,6 +387,19 @@ const Attendance = () => {
     markAttendance,
   }) => {
     const getTeacherName = () => subject.teacherName || "Unknown Teacher";
+
+    const getButtonText = () => {
+      switch (subject.attendanceStatus) {
+        case 'timeIn':
+          return 'Time Out Now';
+        case 'completed':
+          return 'Attendance Completed';
+        default:
+          return 'Mark Attendance';
+      }
+    };
+
+    const isButtonDisabled = subject.attendanceStatus === 'completed';
 
     return (
       <div
@@ -382,14 +477,26 @@ const Attendance = () => {
             <div className="mt-4 pt-4 border-t border-gray-200">
               <div className="space-y-2 mt-4">
                 <button
-                  className="w-full bg-emerald-500 hover:bg-emerald-600 text-white py-2 rounded text-sm transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-emerald-300"
+                  className={`w-full text-white py-2 rounded text-sm transition-colors duration-200 focus:outline-none focus:ring-2 ${
+                    isButtonDisabled 
+                      ? 'bg-gray-400 cursor-not-allowed focus:ring-gray-300' 
+                      : 'bg-emerald-500 hover:bg-emerald-600 focus:ring-emerald-300'
+                  }`}
                   onClick={(e) => {
                     e.stopPropagation();
-                    markAttendance(subject);
+                    if (!isButtonDisabled) {
+                      markAttendance(subject);
+                    }
                   }}
+                  disabled={isButtonDisabled}
                 >
-                  Mark Attendance
+                  {getButtonText()}
                 </button>
+                {subject.attendanceStatus === 'completed' && (
+                  <p className="text-xs text-center text-gray-500 mt-1">
+                    You've already recorded attendance for today
+                  </p>
+                )}
               </div>
             </div>
           )}
