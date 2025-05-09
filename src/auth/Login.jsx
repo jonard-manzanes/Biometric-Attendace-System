@@ -75,7 +75,6 @@ const Login = () => {
             Swal.fire({
               icon: 'success',
               title: `Welcome, ${fullName}`,
-              text: `Role: ${userData.role.toUpperCase()}`,
               timer: 2500,
               showConfirmButton: false,
               didClose: () => {
