@@ -1,59 +1,213 @@
-import React, { useState, useEffect } from 'react';
-import { db } from '../firebaseConfig';
-import { doc, getDocs, getDoc, collection } from 'firebase/firestore';
+import React, { useState, useEffect } from "react";
+import { db } from "../firebaseConfig";
+import {
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  collection,
+  getDocs,
+} from "firebase/firestore";
+import { serverTimestamp } from "firebase/firestore";
+import Swal from "sweetalert2";
 
 const Attendance = () => {
   const [subjects, setSubjects] = useState([]);
   const [activeSubject, setActiveSubject] = useState(null);
 
-  useEffect(() => {
-    const fetchSubjects = async () => {
-      try {
-        const querySnapshot = await getDocs(collection(db, 'classes'));
-        const fetchedSubjects = querySnapshot.docs.map(doc => doc.data());
 
-        const teacherPromises = fetchedSubjects.map(async (subject) => {
-          const teacherRef = doc(db, 'users', subject.teacherID);
-          const teacherDoc = await getDoc(teacherRef);
 
-          let teacherName = 'Unknown Teacher';
-          if (teacherDoc.exists()) {
-            const data = teacherDoc.data();
-            if (data.role === 'teacher') {
-              teacherName = `${data.firstName} ${data.middle ? data.middle + ' ' : ''}${data.lastName}`;
-            }
+  
+useEffect(() => {
+  const fetchSubjects = async () => {
+    try {
+      const studentID = localStorage.getItem("userDocId");
+      const querySnapshot = await getDocs(collection(db, "classes"));
+      const fetchedSubjects = querySnapshot.docs
+        .map((doc) => ({ id: doc.id, ...doc.data() }))
+        .filter((subject) => subject.studentIDs?.includes(studentID)); 
+
+      const teacherPromises = fetchedSubjects.map(async (subject) => {
+        const teacherRef = doc(db, "users", subject.teacherID);
+        const teacherDoc = await getDoc(teacherRef);
+
+        let teacherName = "Unknown Teacher";
+        if (teacherDoc.exists()) {
+          const data = teacherDoc.data();
+          if (data.role === "teacher") {
+            teacherName = `${data.firstName} ${
+              data.middle ? data.middle + " " : ""
+            }${data.lastName}`;
           }
+        }
 
+        const scheduleWith12HourFormat = subject.schedule?.map((sched) => {
           return {
-            ...subject,
-            teacherName,
+            ...sched,
+            start: convertTo12HourFormat(sched.start),
+            end: convertTo12HourFormat(sched.end),
           };
         });
 
-        const mappedSubjects = await Promise.all(teacherPromises);
-        setSubjects(mappedSubjects);
-      } catch (error) {
-        console.error('Error fetching subjects: ', error);
+        return {
+          ...subject,
+          teacherName,
+          schedule: scheduleWith12HourFormat,
+        };
+      });
+
+      const mappedSubjects = await Promise.all(teacherPromises);
+      setSubjects(mappedSubjects);
+    } catch (error) {
+      console.error("Error fetching subjects: ", error);
+    }
+  };
+
+  fetchSubjects();
+}, []);
+
+
+
+
+
+
+
+
+
+  const convertTo12HourFormat = (time24) => {
+    if (!time24) return "";
+    
+    const [hours, minutes] = time24.split(':');
+    const hour = parseInt(hours, 10);
+    const suffix = hour >= 12 ? 'PM' : 'AM';
+    const hour12 = hour % 12 || 12;
+    return `${hour12}:${minutes} ${suffix}`;
+  };
+
+  // Helper function to convert time to minutes since midnight for comparison
+  const timeToMinutes = (timeStr) => {
+    if (!timeStr) return 0;
+    
+    const [time, period] = timeStr.split(' ');
+    let [hours, minutes] = time.split(':').map(Number);
+    
+    if (period === 'PM' && hours !== 12) {
+      hours += 12;
+    } else if (period === 'AM' && hours === 12) {
+      hours = 0;
+    }
+    
+    return hours * 60 + minutes;
+  };
+
+  const markAttendance = async (subject) => {
+    try {
+      const studentID = localStorage.getItem("userDocId");
+      if (!studentID) {
+        Swal.fire({
+          icon: "error",
+          title: "Error",
+          text: "Student ID not found. Please log in again.",
+        });
+        return;
       }
-    };
 
-    fetchSubjects();
-  }, []);
+      // Get current day and time
+      const now = new Date();
+      const currentDay = now.toLocaleString("en-US", { weekday: "long" });
+      const currentHours = now.getHours();
+      const currentMinutes = now.getMinutes();
+      const currentTime24 = `${currentHours}:${currentMinutes < 10 ? '0' + currentMinutes : currentMinutes}`;
+      const currentTime12 = convertTo12HourFormat(currentTime24);
+      const currentTimeInMinutes = timeToMinutes(currentTime12);
 
-  const AttendanceCard = ({ subject, index, activeSubject, setActiveSubject }) => {
-    const getTeacherName = () => subject.teacherName || 'Unknown Teacher';
+      // Check if today matches any schedule
+      const isWithinSchedule = subject.schedule?.some((sched) => {
+        if (sched.day !== currentDay) return false;
+        
+        const startTimeInMinutes = timeToMinutes(sched.start);
+        const endTimeInMinutes = timeToMinutes(sched.end);
+        
+        return currentTimeInMinutes >= startTimeInMinutes && 
+               currentTimeInMinutes <= endTimeInMinutes;
+      });
+
+      if (!isWithinSchedule) {
+        Swal.fire({
+          icon: "error",
+          title: "Error",
+          text: `You can only mark attendance during your scheduled class time (${subject.schedule.map(s => `${s.day}: ${s.start} - ${s.end}`).join(', ')})`,
+        });
+        return;
+      }
+
+      // Proceed to mark attendance
+      const classID =
+        subject.joinCode || subject.subjectName.replace(/\s/g, "_");
+      const today = now.toISOString().split("T")[0];
+
+      const attendanceRef = doc(db, "attendance", classID, today, studentID);
+      const attendanceSnap = await getDoc(attendanceRef);
+
+      if (attendanceSnap.exists()) {
+        const data = attendanceSnap.data();
+        if (!data.timeOut) {
+          await updateDoc(attendanceRef, {
+            timeOut: serverTimestamp(),
+          });
+          Swal.fire({
+            icon: "success",
+            title: "Success",
+            text: "Time-out recorded successfully!",
+          });
+        } else {
+          Swal.fire({
+            icon: "info",
+            title: "Already Recorded",
+            text: "Attendance already recorded for today.",
+          });
+        }
+      } else {
+        await setDoc(attendanceRef, {
+          timeIn: serverTimestamp(),
+        });
+        Swal.fire({
+          icon: "success",
+          title: "Success",
+          text: "Attendance marked successfully!",
+        });
+      }
+    } catch (error) {
+      console.error("❌ Error marking attendance:", error);
+      Swal.fire({
+        icon: "error",
+        title: "Error",
+        text: "Failed to mark attendance. Please try again.",
+      });
+    }
+  };
+
+  const AttendanceCard = ({
+    subject,
+    index,
+    activeSubject,
+    setActiveSubject,
+  }) => {
+    const getTeacherName = () => subject.teacherName || "Unknown Teacher";
 
     return (
       <div
         className={`bg-white rounded-lg shadow-md overflow-hidden transition-all duration-200 transform hover:-translate-y-1 hover:shadow-lg cursor-pointer ${
-          activeSubject === index ? 'ring-2 ring-emerald-500' : ''
+          activeSubject === index ? "ring-2 ring-emerald-500" : ""
         }`}
         onClick={() => setActiveSubject(activeSubject === index ? null : index)}
       >
         <div className="h-2 bg-emerald-500"></div>
         <div className="p-5">
           <div className="flex justify-between items-start mb-4">
-            <h3 className="font-bold text-xl text-gray-800">{subject.subjectName}</h3>
+            <h3 className="font-bold text-xl text-gray-800">
+              {subject.subjectName}
+            </h3>
             {subject.joinCode && (
               <div className="bg-emerald-100 text-emerald-800 text-xs font-medium px-2.5 py-0.5 rounded">
                 Code: {subject.joinCode}
@@ -64,19 +218,31 @@ const Attendance = () => {
           <div className="space-y-3">
             <div className="flex items-center">
               <div className="w-8 h-8 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-600">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="h-4 w-4"
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                >
                   <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z" />
                 </svg>
               </div>
               <div className="ml-3">
                 <span className="text-xs text-gray-500">Teacher</span>
-                <p className="text-sm font-medium text-gray-800">{getTeacherName()}</p>
+                <p className="text-sm font-medium text-gray-800">
+                  {getTeacherName()}
+                </p>
               </div>
             </div>
 
             <div className="flex items-center">
               <div className="w-8 h-8 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-600">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="h-4 w-4"
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                >
                   <path
                     fillRule="evenodd"
                     d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z"
@@ -106,10 +272,7 @@ const Attendance = () => {
               <div className="space-y-2 mt-4">
                 <button
                   className="w-full bg-emerald-500 hover:bg-emerald-600 text-white py-2 rounded text-sm transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-emerald-300"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    alert(`Attendance marked for ${subject.subjectName}`);
-                  }}
+                  onClick={() => markAttendance(subject)}
                 >
                   Mark Attendance
                 </button>
@@ -125,7 +288,9 @@ const Attendance = () => {
     <div>
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-gray-800">Class Attendance</h1>
-        <p className="text-gray-600 mt-1">Track your attendance for all enrolled classes</p>
+        <p className="text-gray-600 mt-1">
+          Track your attendance for all enrolled classes
+        </p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
