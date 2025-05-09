@@ -1,16 +1,58 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Bell, Home, CalendarCheck, User, LogOut, Menu } from "lucide-react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
-
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "../firebaseConfig";
 import Swal from "sweetalert2";
 
 export default function StudentLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [profileData, setProfileData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   const navigate = useNavigate();
   const location = useLocation();
   const currentPage = location.pathname.split("/")[2] || "dashboard";
+
+  useEffect(() => {
+    const fetchProfileData = async () => {
+      setLoading(true);
+      try {
+        const storedUser = localStorage.getItem('user');
+        if (!storedUser) {
+          setError('No user data found. Please login again.');
+          setLoading(false);
+          return;
+        }
+
+        const parsedUser = JSON.parse(storedUser);
+        if (!parsedUser.docId) {
+          setError('Missing document ID. Please login again.');
+          setLoading(false);
+          return;
+        }
+
+        const docRef = doc(db, 'users', parsedUser.docId);
+        const docSnap = await getDoc(docRef);
+
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          setProfileData(data);
+        } else {
+          setError('No profile data found for this user.');
+        }
+      } catch (error) {
+        console.error('Error getting document:', error);
+        setError('Error fetching profile data.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProfileData();
+  }, []);
 
   const toggleSidebar = () => {
     if (window.innerWidth < 768) {
@@ -35,7 +77,6 @@ export default function StudentLayout() {
       cancelButtonText: "Cancel",
     }).then((result) => {
       if (result.isConfirmed) {
-
         localStorage.removeItem("user");
         localStorage.removeItem("userDocId");
         localStorage.removeItem("currentUserId");
@@ -43,6 +84,14 @@ export default function StudentLayout() {
         navigate("/login");
       }
     });
+  };
+
+  // Function to get user initials
+  const getUserInitials = () => {
+    if (!profileData) return 'S';
+    const firstInitial = profileData.firstName ? profileData.firstName.charAt(0) : '';
+    const lastInitial = profileData.lastName ? profileData.lastName.charAt(0) : '';
+    return `${firstInitial}${lastInitial}`.toUpperCase() || 'S';
   };
 
   return (
@@ -149,8 +198,10 @@ export default function StudentLayout() {
                 <Bell size={20} />
                 <span className="absolute top-0 right-0 h-2 w-2 rounded-full bg-red-500"></span>
               </button>
-              <div className="h-8 w-8 rounded-full bg-emerald-700 flex items-center justify-center text-emerald-100 font-medium">
-                S
+              <div className="flex items-center space-x-2">
+                <div className="h-8 w-8 rounded-full bg-emerald-700 flex items-center justify-center text-emerald-100 font-medium">
+                  {getUserInitials()}
+                </div>
               </div>
             </div>
           </div>
