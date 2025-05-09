@@ -1,149 +1,205 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
+import * as faceapi from 'face-api.js';
 import { db } from "../firebaseConfig";
-import {
-  doc,
-  getDoc,
-  setDoc,
-  updateDoc,
-  collection,
-  getDocs,
-} from "firebase/firestore";
+import { doc, getDoc, setDoc, updateDoc, collection, getDocs } from "firebase/firestore";
 import { serverTimestamp } from "firebase/firestore";
 import Swal from "sweetalert2";
 
 const Attendance = () => {
   const [subjects, setSubjects] = useState([]);
   const [activeSubject, setActiveSubject] = useState(null);
+  const [showFaceModal, setShowFaceModal] = useState(false);
+  const [verificationStatus, setVerificationStatus] = useState('');
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [modelsLoaded, setModelsLoaded] = useState(false);
+  const videoRef = useRef();
+  const currentSubjectRef = useRef(null);
+  const intervalRef = useRef(null);
 
+  // Load face-api.js models
+  useEffect(() => {
+    const loadModels = async () => {
+      try {
+        await Promise.all([
+          faceapi.nets.tinyFaceDetector.loadFromUri('/models/tiny_face_detector_model'),
+          faceapi.nets.faceLandmark68Net.loadFromUri('/models/face_landmark_68_model'),
+          faceapi.nets.faceRecognitionNet.loadFromUri('/models/face_recognition_model'),
+        ]);
+        setModelsLoaded(true);
+      } catch (error) {
+        console.error("Error loading face models:", error);
+        Swal.fire({
+          icon: 'error',
+          title: 'Error',
+          text: 'Could not load face recognition models. Please refresh the page.',
+        });
+      }
+    };
 
+    loadModels();
 
-  
-useEffect(() => {
-  const fetchSubjects = async () => {
-    try {
-      const studentID = localStorage.getItem("userDocId");
-      const querySnapshot = await getDocs(collection(db, "classes"));
-      const fetchedSubjects = querySnapshot.docs
-        .map((doc) => ({ id: doc.id, ...doc.data() }))
-        .filter((subject) => subject.studentIDs?.includes(studentID)); 
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+    };
+  }, []);
 
-      const teacherPromises = fetchedSubjects.map(async (subject) => {
-        const teacherRef = doc(db, "users", subject.teacherID);
-        const teacherDoc = await getDoc(teacherRef);
+  // Start/stop camera when modal opens/closes
+  useEffect(() => {
+    if (showFaceModal && modelsLoaded) {
+      startCamera();
+    } else {
+      stopCamera();
+    }
 
-        let teacherName = "Unknown Teacher";
-        if (teacherDoc.exists()) {
-          const data = teacherDoc.data();
-          if (data.role === "teacher") {
-            teacherName = `${data.firstName} ${
-              data.middle ? data.middle + " " : ""
-            }${data.lastName}`;
+    return () => {
+      stopCamera();
+    };
+  }, [showFaceModal, modelsLoaded]);
+
+  // Fetch subjects data
+  useEffect(() => {
+    const fetchSubjects = async () => {
+      try {
+        const studentID = localStorage.getItem("userDocId");
+        const querySnapshot = await getDocs(collection(db, "classes"));
+        const fetchedSubjects = querySnapshot.docs
+          .map((doc) => ({ id: doc.id, ...doc.data() }))
+          .filter((subject) => subject.studentIDs?.includes(studentID)); 
+
+        const teacherPromises = fetchedSubjects.map(async (subject) => {
+          const teacherRef = doc(db, "users", subject.teacherID);
+          const teacherDoc = await getDoc(teacherRef);
+
+          let teacherName = "Unknown Teacher";
+          if (teacherDoc.exists()) {
+            const data = teacherDoc.data();
+            if (data.role === "teacher") {
+              teacherName = `${data.firstName} ${
+                data.middle ? data.middle + " " : ""
+              }${data.lastName}`;
+            }
           }
-        }
 
-        const scheduleWith12HourFormat = subject.schedule?.map((sched) => {
+          const scheduleWith12HourFormat = subject.schedule?.map((sched) => {
+            return {
+              ...sched,
+              start: convertTo12HourFormat(sched.start),
+              end: convertTo12HourFormat(sched.end),
+            };
+          });
+
           return {
-            ...sched,
-            start: convertTo12HourFormat(sched.start),
-            end: convertTo12HourFormat(sched.end),
+            ...subject,
+            teacherName,
+            schedule: scheduleWith12HourFormat,
           };
         });
 
-        return {
-          ...subject,
-          teacherName,
-          schedule: scheduleWith12HourFormat,
-        };
+        const mappedSubjects = await Promise.all(teacherPromises);
+        setSubjects(mappedSubjects);
+      } catch (error) {
+        console.error("Error fetching subjects: ", error);
+      }
+    };
+
+    fetchSubjects();
+  }, []);
+
+  const startCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+    } catch (err) {
+      console.error("Error accessing camera:", err);
+      Swal.fire({
+        icon: 'error',
+        title: 'Camera Error',
+        text: 'Could not access camera. Please check permissions.',
       });
+      setShowFaceModal(false);
+    }
+  };
 
-      const mappedSubjects = await Promise.all(teacherPromises);
-      setSubjects(mappedSubjects);
+  const stopCamera = () => {
+    if (videoRef.current?.srcObject) {
+      videoRef.current.srcObject.getTracks().forEach(track => track.stop());
+    }
+  };
+
+  const verifyIdentity = async () => {
+    if (!currentSubjectRef.current) return;
+    
+    setIsVerifying(true);
+    setVerificationStatus('Verifying your identity...');
+
+    try {
+      const studentID = localStorage.getItem("userDocId");
+      const studentRef = doc(db, "users", studentID);
+      const studentDoc = await getDoc(studentRef);
+      
+      if (!studentDoc.exists() || !studentDoc.data().descriptor) {
+        throw new Error("No face data found for this student");
+      }
+
+      const studentDescriptor = new Float32Array(studentDoc.data().descriptor);
+      const labeledDescriptor = new faceapi.LabeledFaceDescriptors(studentID, [studentDescriptor]);
+      const faceMatcher = new faceapi.FaceMatcher([labeledDescriptor], 0.6);
+
+      intervalRef.current = setInterval(async () => {
+        try {
+          const detection = await faceapi
+            .detectSingleFace(videoRef.current, new faceapi.TinyFaceDetectorOptions())
+            .withFaceLandmarks()
+            .withFaceDescriptor();
+
+          if (detection) {
+            const bestMatch = faceMatcher.findBestMatch(detection.descriptor);
+            
+            if (bestMatch.label === studentID) {
+              clearInterval(intervalRef.current);
+              setVerificationStatus('Identity verified!');
+              setIsVerifying(false);
+              
+              await markAttendanceAfterVerification(currentSubjectRef.current);
+              
+              setTimeout(() => {
+                setShowFaceModal(false);
+              }, 1500);
+            } else {
+              setVerificationStatus('Face not recognized. Please try again.');
+            }
+          }
+        } catch (error) {
+          console.error("Verification error:", error);
+          setVerificationStatus('Error during verification');
+        }
+      }, 2000);
+
     } catch (error) {
-      console.error("Error fetching subjects: ", error);
+      console.error("Verification setup error:", error);
+      setVerificationStatus('Error setting up verification');
+      setIsVerifying(false);
+      Swal.fire({
+        icon: 'error',
+        title: 'Verification Error',
+        text: 'Could not verify your identity. Please try again or contact support.',
+      });
     }
   };
 
-  fetchSubjects();
-}, []);
-
-
-
-
-
-
-
-
-
-  const convertTo12HourFormat = (time24) => {
-    if (!time24) return "";
-    
-    const [hours, minutes] = time24.split(':');
-    const hour = parseInt(hours, 10);
-    const suffix = hour >= 12 ? 'PM' : 'AM';
-    const hour12 = hour % 12 || 12;
-    return `${hour12}:${minutes} ${suffix}`;
-  };
-
-  // Helper function to convert time to minutes since midnight for comparison
-  const timeToMinutes = (timeStr) => {
-    if (!timeStr) return 0;
-    
-    const [time, period] = timeStr.split(' ');
-    let [hours, minutes] = time.split(':').map(Number);
-    
-    if (period === 'PM' && hours !== 12) {
-      hours += 12;
-    } else if (period === 'AM' && hours === 12) {
-      hours = 0;
-    }
-    
-    return hours * 60 + minutes;
-  };
-
-  const markAttendance = async (subject) => {
+  const markAttendanceAfterVerification = async (subject) => {
     try {
       const studentID = localStorage.getItem("userDocId");
       if (!studentID) {
-        Swal.fire({
-          icon: "error",
-          title: "Error",
-          text: "Student ID not found. Please log in again.",
-        });
-        return;
+        throw new Error("Student ID not found");
       }
 
-      // Get current day and time
       const now = new Date();
-      const currentDay = now.toLocaleString("en-US", { weekday: "long" });
-      const currentHours = now.getHours();
-      const currentMinutes = now.getMinutes();
-      const currentTime24 = `${currentHours}:${currentMinutes < 10 ? '0' + currentMinutes : currentMinutes}`;
-      const currentTime12 = convertTo12HourFormat(currentTime24);
-      const currentTimeInMinutes = timeToMinutes(currentTime12);
-
-      // Check if today matches any schedule
-      const isWithinSchedule = subject.schedule?.some((sched) => {
-        if (sched.day !== currentDay) return false;
-        
-        const startTimeInMinutes = timeToMinutes(sched.start);
-        const endTimeInMinutes = timeToMinutes(sched.end);
-        
-        return currentTimeInMinutes >= startTimeInMinutes && 
-               currentTimeInMinutes <= endTimeInMinutes;
-      });
-
-      if (!isWithinSchedule) {
-        Swal.fire({
-          icon: "error",
-          title: "Error",
-          text: `You can only mark attendance during your scheduled class time (${subject.schedule.map(s => `${s.day}: ${s.start} - ${s.end}`).join(', ')})`,
-        });
-        return;
-      }
-
-      // Proceed to mark attendance
-      const classID =
-        subject.joinCode || subject.subjectName.replace(/\s/g, "_");
+      const classID = subject.joinCode || subject.subjectName.replace(/\s/g, "_");
       const today = now.toISOString().split("T")[0];
 
       const attendanceRef = doc(db, "attendance", classID, today, studentID);
@@ -154,6 +210,7 @@ useEffect(() => {
         if (!data.timeOut) {
           await updateDoc(attendanceRef, {
             timeOut: serverTimestamp(),
+            verificationMethod: 'face_recognition'
           });
           Swal.fire({
             icon: "success",
@@ -170,6 +227,7 @@ useEffect(() => {
       } else {
         await setDoc(attendanceRef, {
           timeIn: serverTimestamp(),
+          verifiedBy: 'face_recognition',
         });
         Swal.fire({
           icon: "success",
@@ -178,13 +236,65 @@ useEffect(() => {
         });
       }
     } catch (error) {
-      console.error("❌ Error marking attendance:", error);
+      console.error("Error marking attendance:", error);
       Swal.fire({
         icon: "error",
         title: "Error",
-        text: "Failed to mark attendance. Please try again.",
+        text: "Failed to mark attendance after verification.",
       });
     }
+  };
+
+  const handleMarkAttendance = (subject) => {
+    const now = new Date();
+    const currentDay = now.toLocaleString("en-US", { weekday: "long" });
+    const currentHours = now.getHours();
+    const currentMinutes = now.getMinutes();
+    const currentTime24 = `${currentHours}:${currentMinutes < 10 ? '0' + currentMinutes : currentMinutes}`;
+    const currentTime12 = convertTo12HourFormat(currentTime24);
+    const currentTimeInMinutes = timeToMinutes(currentTime12);
+
+    const isWithinSchedule = subject.schedule?.some((sched) => {
+      if (sched.day !== currentDay) return false;
+      const startTimeInMinutes = timeToMinutes(sched.start);
+      const endTimeInMinutes = timeToMinutes(sched.end);
+      return currentTimeInMinutes >= startTimeInMinutes && 
+             currentTimeInMinutes <= endTimeInMinutes;
+    });
+
+    if (!isWithinSchedule) {
+      Swal.fire({
+        icon: "error",
+        title: "Error",
+        text: `You can only mark attendance during your scheduled class time (${subject.schedule.map(s => `${s.day}: ${s.start} - ${s.end}`).join(', ')})`,
+      });
+      return;
+    }
+
+    currentSubjectRef.current = subject;
+    setShowFaceModal(true);
+    setVerificationStatus('Position your face in the frame');
+  };
+
+  const convertTo12HourFormat = (time24) => {
+    if (!time24) return "";
+    const [hours, minutes] = time24.split(':');
+    const hour = parseInt(hours, 10);
+    const suffix = hour >= 12 ? 'PM' : 'AM';
+    const hour12 = hour % 12 || 12;
+    return `${hour12}:${minutes} ${suffix}`;
+  };
+
+  const timeToMinutes = (timeStr) => {
+    if (!timeStr) return 0;
+    const [time, period] = timeStr.split(' ');
+    let [hours, minutes] = time.split(':').map(Number);
+    if (period === 'PM' && hours !== 12) {
+      hours += 12;
+    } else if (period === 'AM' && hours === 12) {
+      hours = 0;
+    }
+    return hours * 60 + minutes;
   };
 
   const AttendanceCard = ({
@@ -192,6 +302,7 @@ useEffect(() => {
     index,
     activeSubject,
     setActiveSubject,
+    markAttendance,
   }) => {
     const getTeacherName = () => subject.teacherName || "Unknown Teacher";
 
@@ -272,7 +383,10 @@ useEffect(() => {
               <div className="space-y-2 mt-4">
                 <button
                   className="w-full bg-emerald-500 hover:bg-emerald-600 text-white py-2 rounded text-sm transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-emerald-300"
-                  onClick={() => markAttendance(subject)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    markAttendance(subject);
+                  }}
                 >
                   Mark Attendance
                 </button>
@@ -286,6 +400,54 @@ useEffect(() => {
 
   return (
     <div>
+      {/* Face Verification Modal */}
+      {showFaceModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <h2 className="text-xl font-bold mb-4">Verify Your Identity</h2>
+            
+            <div className="relative mb-4">
+              <video 
+                ref={videoRef} 
+                autoPlay 
+                muted 
+                className="w-full h-auto rounded border border-gray-300"
+              />
+              {isVerifying && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50">
+                  <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-500"></div>
+                </div>
+              )}
+            </div>
+            
+            <p className="text-center mb-4 min-h-6">{verificationStatus}</p>
+            
+            <div className="flex justify-center space-x-4">
+              {!isVerifying ? (
+                <>
+                  <button
+                    onClick={verifyIdentity}
+                    className="px-4 py-2 bg-emerald-500 text-white rounded hover:bg-emerald-600"
+                  >
+                    Verify
+                  </button>
+                  <button
+                    onClick={() => {
+                      clearInterval(intervalRef.current);
+                      setShowFaceModal(false);
+                      stopCamera();
+                    }}
+                    className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
+                  >
+                    Cancel
+                  </button>
+                </>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-gray-800">Class Attendance</h1>
         <p className="text-gray-600 mt-1">
@@ -301,6 +463,7 @@ useEffect(() => {
             index={index}
             activeSubject={activeSubject}
             setActiveSubject={setActiveSubject}
+            markAttendance={handleMarkAttendance}
           />
         ))}
       </div>
