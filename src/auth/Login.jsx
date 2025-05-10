@@ -141,7 +141,7 @@ const Login = () => {
           return;
         }
 
-        matcherRef.current = new faceapi.FaceMatcher(labeledDescriptors, 0.6);
+        matcherRef.current = new faceapi.FaceMatcher(labeledDescriptors, 0.3);
         userMapRef.current = userMap;
 
         setLoading(false);

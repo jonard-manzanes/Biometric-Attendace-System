@@ -95,7 +95,7 @@ const SignUp = () => {
         descriptor,
         existingDescriptor
       );
-      if (distance < 0.6) {
+      if (distance < 0.3) {
         return true;
       }
     }
