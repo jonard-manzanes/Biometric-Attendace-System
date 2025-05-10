@@ -68,7 +68,7 @@ const TeacherSignUp = () => {
     for (const doc of querySnapshot.docs) {
       const existingDescriptor = doc.data().descriptor;
       const distance = faceapi.euclideanDistance(descriptor, existingDescriptor);
-      if (distance < 0.6) {
+      if (distance < 0.3) {
         return true;
       }
     }
