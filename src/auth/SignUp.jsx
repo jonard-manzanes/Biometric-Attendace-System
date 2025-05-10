@@ -386,7 +386,7 @@ const SignUp = () => {
             <button
               onClick={inviteCode}
               className="text-emerald-500 hover:underline"
-              >Cerate Accrount teacher</button>
+              >Create Teacher account? </button>
           </div>
         </form>
       </div>
