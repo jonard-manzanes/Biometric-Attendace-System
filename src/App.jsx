@@ -11,10 +11,15 @@ import StudentProfile from "./student/Profile";
 
 import TeacherLayout from "./teacher/TeacherLayout";
 import TeacherDashboard from "./teacher/Dashboard";
-import TeacherClasses from './teacher/Classes';
+import TeacherClasses from "./teacher/Classes";
 import TeacherReports from "./teacher/Reports";
 
+import AdminLayout from "./admin/AdminLayout";
 import AdminDashboard from "./admin/Dashboard";
+import UniversityCode from "./admin/UniversityCode";
+import UserManagement from "./admin/UserManagement";
+import Reports from "./admin/Reports";
+
 
 function App() {
   return (
@@ -54,13 +59,19 @@ function App() {
         </Route>
 
         <Route
-          path="/admin/dashboard"
+          path="/admin"
           element={
             <ProtectedRoute role="admin">
-              <AdminDashboard />
+              <AdminLayout />
             </ProtectedRoute>
           }
-        />
+        >
+          <Route path="dashboard" element={<AdminDashboard />} />
+          <Route path="user-management" element={<UserManagement />} />
+          <Route path="university-code" element={<UniversityCode />} />
+          <Route path="reports" element={<Reports />} />
+
+        </Route>
       </Routes>
     </Router>
   );

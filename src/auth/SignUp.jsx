@@ -10,6 +10,7 @@ import {
   getDocs,
   updateDoc,
   doc,
+  serverTimestamp,
 } from "firebase/firestore";
 
 const SignUp = () => {
@@ -205,6 +206,7 @@ const SignUp = () => {
           descriptor,
           image: snapshot,
           fullName: `${firstName} ${lastName}`,
+          createdAt: serverTimestamp(),
         });
 
         Swal.fire({
@@ -232,51 +234,46 @@ const SignUp = () => {
     }
   };
 
-
   const inviteCode = () => {
     Swal.fire({
-      title: 'Enter University Code',
-      text: 'Please enter the code provided by your university.',
-      input: 'text',
+      title: "Enter University Code",
+      text: "Please enter the code provided by your university.",
+      input: "text",
       showCancelButton: true,
-      confirmButtonText: 'Submit',
-      cancelButtonText: 'Cancel',
+      confirmButtonText: "Submit",
+      cancelButtonText: "Cancel",
       preConfirm: (codeprovided) => {
         if (!codeprovided) {
-          Swal.showValidationMessage('Please enter a code');
+          Swal.showValidationMessage("Please enter a code");
           return false;
         }
-  
+
         const codeNumber = Number(codeprovided);
         if (isNaN(codeNumber)) {
-          Swal.showValidationMessage('Please enter a valid numeric code');
+          Swal.showValidationMessage("Please enter a valid numeric code");
           return false;
         }
-  
+
         const uniCode = collection(db, "UniversityCode");
         const q = query(uniCode, where("InviteCode", "==", codeNumber));
-  
+
         return getDocs(q)
           .then((querySnapshot) => {
             if (querySnapshot.empty) {
-              Swal.showValidationMessage('Invalid code provided');
+              Swal.showValidationMessage("Invalid code provided");
               return false;
             }
-  
+
             window.location.href = "/teacher-signup";
           })
           .catch((error) => {
             console.error("Error checking code: ", error);
-            Swal.showValidationMessage('Error checking code');
+            Swal.showValidationMessage("Error checking code");
           });
       },
     });
   };
-  
-  
 
-
-  
   return (
     <div className="min-h-screen bg-emerald-800 flex justify-center items-center px-4">
       <div className="w-full max-w-4xl bg-white/10 p-6 md:p-10 rounded-xl shadow-lg backdrop-blur-2xl">
@@ -386,7 +383,9 @@ const SignUp = () => {
             <button
               onClick={inviteCode}
               className="text-emerald-500 hover:underline"
-              >Create Teacher account? </button>
+            >
+              Create Teacher account?{" "}
+            </button>
           </div>
         </form>
       </div>

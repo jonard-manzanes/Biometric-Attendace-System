@@ -130,7 +130,7 @@ const Login = () => {
               ...data,
               id: label,
               docId: doc.id,
-              uid: data.uid || doc.id // Store both uid and docId
+              uid: data.uid || doc.id 
             };
           }
         });
