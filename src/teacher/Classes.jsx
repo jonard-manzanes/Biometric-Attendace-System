@@ -13,7 +13,7 @@ import {
   updateDoc,
   arrayRemove,
 } from "firebase/firestore";
-import { X, Calendar, Clock, Plus, Trash2 } from "lucide-react";
+import { X, Calendar, Clock, Plus, Trash2, Edit } from "lucide-react";
 
 const dayOptions = [
   "Monday",
@@ -25,14 +25,30 @@ const dayOptions = [
   "Sunday",
 ];
 
-// New CreateClassModal Component
-const CreateClassModal = ({ isOpen, onClose, onSubmit, loading }) => {
+// New CreateClassModal Component (updated to handle both create and edit)
+const ClassModal = ({ 
+  isOpen, 
+  onClose, 
+  onSubmit, 
+  loading, 
+  mode = "create", 
+  initialData = null 
+}) => {
   const [subjectName, setSubjectName] = useState("");
   const [day, setDay] = useState("Monday");
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
   const [schedules, setSchedules] = useState([]);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (mode === "edit" && initialData) {
+      setSubjectName(initialData.subjectName);
+      setSchedules(initialData.schedule || []);
+    } else {
+      resetForm();
+    }
+  }, [mode, initialData]);
 
   const addSchedule = () => {
     if (!startTime || !endTime) {
@@ -88,7 +104,9 @@ const CreateClassModal = ({ isOpen, onClose, onSubmit, loading }) => {
       <div className="bg-white rounded-lg shadow-xl w-full max-w-md overflow-hidden">
         {/* Header */}
         <div className="bg-emerald-500 px-6 py-4 flex justify-between items-center">
-          <h2 className="text-xl font-bold text-white">Create New Class</h2>
+          <h2 className="text-xl font-bold text-white">
+            {mode === "edit" ? "Edit Class" : "Create New Class"}
+          </h2>
           <button 
             onClick={handleClose}
             className="text-white hover:bg-emerald-600 rounded-full p-1"
@@ -210,7 +228,7 @@ const CreateClassModal = ({ isOpen, onClose, onSubmit, loading }) => {
             disabled={loading}
             className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-emerald-500 hover:bg-emerald-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 disabled:bg-emerald-300"
           >
-            {loading ? "Creating..." : "Create Class"}
+            {loading ? (mode === "edit" ? "Updating..." : "Creating...") : (mode === "edit" ? "Update Class" : "Create Class")}
           </button>
         </div>
       </div>
@@ -221,6 +239,7 @@ const CreateClassModal = ({ isOpen, onClose, onSubmit, loading }) => {
 // Main Classes Component
 const Classes = ({ currentUser }) => {
   const [showModal, setShowModal] = useState(false);
+  const [editModalData, setEditModalData] = useState(null);
   const [classes, setClasses] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -273,6 +292,29 @@ const Classes = ({ currentUser }) => {
     } catch (err) {
       console.error("Error creating class:", err);
       setError("Failed to create class. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUpdateClass = async ({ subjectName, schedules }) => {
+    if (!editModalData) return;
+
+    setLoading(true);
+    setError("");
+
+    try {
+      await updateDoc(doc(db, "classes", editModalData.id), {
+        subjectName,
+        schedule: schedules,
+      });
+
+      alert("Class updated successfully!");
+      setEditModalData(null);
+      await fetchClasses();
+    } catch (err) {
+      console.error("Error updating class:", err);
+      setError("Failed to update class. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -408,13 +450,16 @@ const Classes = ({ currentUser }) => {
     setExpandedClass(expandedClass === classId ? null : classId);
   };
 
+  const handleEdit = (classData) => {
+    setEditModalData(classData);
+  };
+
   useEffect(() => {
     fetchClasses();
   }, []);
 
   return (
     <div>
-
       {error && (
         <div className="mb-4 bg-red-50 border-l-4 border-red-500 p-3 text-red-700">
           <p>{error}</p>
@@ -428,11 +473,21 @@ const Classes = ({ currentUser }) => {
         <Plus size={18} className="mr-1" /> Create New Class
       </button>
 
-      <CreateClassModal
+      <ClassModal
         isOpen={showModal}
         onClose={() => setShowModal(false)}
         onSubmit={handleCreateClass}
         loading={loading}
+        mode="create"
+      />
+
+      <ClassModal
+        isOpen={!!editModalData}
+        onClose={() => setEditModalData(null)}
+        onSubmit={handleUpdateClass}
+        loading={loading}
+        mode="edit"
+        initialData={editModalData}
       />
 
       {loading && classes.length === 0 ? (
@@ -457,11 +512,20 @@ const Classes = ({ currentUser }) => {
                   <h3 className="font-bold text-xl text-gray-800">
                     {subject.subjectName}
                   </h3>
-                  {subject.joinCode && (
-                    <div className="bg-emerald-100 text-emerald-800 text-xs font-medium px-2.5 py-0.5 rounded">
-                      Code: {subject.joinCode}
-                    </div>
-                  )}
+                  <div className="flex space-x-2">
+                    {subject.joinCode && (
+                      <div className="bg-emerald-100 text-emerald-800 text-xs font-medium px-2.5 py-0.5 rounded">
+                        Code: {subject.joinCode}
+                      </div>
+                    )}
+                    <button
+                      onClick={() => handleEdit(subject)}
+                      className="text-gray-600 hover:text-emerald-600 p-1"
+                      title="Edit class"
+                    >
+                      <Edit size={16} />
+                    </button>
+                  </div>
                 </div>
 
                 <div className="space-y-3">

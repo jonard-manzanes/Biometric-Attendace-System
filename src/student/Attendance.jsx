@@ -165,7 +165,7 @@ const Attendance = () => {
 
       const studentDescriptor = new Float32Array(studentDoc.data().descriptor);
       const labeledDescriptor = new faceapi.LabeledFaceDescriptors(studentID, [studentDescriptor]);
-      const faceMatcher = new faceapi.FaceMatcher([labeledDescriptor], 0.6);
+      const faceMatcher = new faceapi.FaceMatcher([labeledDescriptor], 0.3);
 
       intervalRef.current = setInterval(async () => {
         try {

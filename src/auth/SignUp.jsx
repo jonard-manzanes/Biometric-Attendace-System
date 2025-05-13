@@ -19,21 +19,12 @@ const SignUp = () => {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [studentId, setStudentId] = useState("");
-  const [course, setCourse] = useState("");
-  const [year, setYear] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [status, setStatus] = useState("Initializing...");
   const role = "student";
-
-  const courses = [
-    "Computer Science",
-    "Information Technology",
-    "Engineering",
-    "Business Administration",
-    "Psychology",
-    "Nursing",
-  ];
-
-  const years = ["1st Year", "2nd Year", "3rd Year", "4th Year", "5th Year"];
+  const [passwordError, setPasswordError] = useState("");
 
   useEffect(() => {
     const initModelsAndVideo = async () => {
@@ -64,6 +55,26 @@ const SignUp = () => {
 
     initModelsAndVideo();
   }, []);
+
+  const validatePassword = (password) => {
+    const errors = [];
+    if (password.length < 8) {
+      errors.push("Password must be at least 8 characters long");
+    }
+    if (!/[A-Z]/.test(password)) {
+      errors.push("Password must contain at least one uppercase letter");
+    }
+    if (!/[a-z]/.test(password)) {
+      errors.push("Password must contain at least one lowercase letter");
+    }
+    if (!/[0-9]/.test(password)) {
+      errors.push("Password must contain at least one number");
+    }
+    if (!/[!@#$%^&*(),.?":{}|<>]/.test(password)) {
+      errors.push("Password must contain at least one special character");
+    }
+    return errors;
+  };
 
   const captureSnapshot = () => {
     const video = videoRef.current;
@@ -106,12 +117,30 @@ const SignUp = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    const passwordErrors = validatePassword(password);
+    if (passwordErrors.length > 0) {
+      Swal.fire({
+        icon: "error",
+        title: "Password Error",
+        text: passwordErrors.join(", "),
+      });
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      Swal.fire({
+        icon: "error",
+        title: "Password Mismatch",
+        text: "The passwords you entered do not match.",
+      });
+      return;
+    }
+
     if (
       !firstName.trim() ||
       !lastName.trim() ||
       !studentId.trim() ||
-      !course ||
-      !year
+      !email.trim()
     ) {
       Swal.fire({
         icon: "warning",
@@ -187,6 +216,8 @@ const SignUp = () => {
           await updateDoc(userRef, {
             descriptor,
             image: snapshot,
+            email,
+            password, 
           });
 
           Swal.fire({
@@ -200,8 +231,8 @@ const SignUp = () => {
           firstName,
           lastName,
           studentId,
-          course,
-          year,
+          email,
+          password,
           role,
           descriptor,
           image: snapshot,
@@ -222,8 +253,10 @@ const SignUp = () => {
       setFirstName("");
       setLastName("");
       setStudentId("");
-      setCourse("");
-      setYear("");
+      setEmail("");
+      setPassword("");
+      setConfirmPassword("");
+      setPasswordError("");
     } catch (error) {
       console.error(error);
       Swal.fire({
@@ -319,41 +352,57 @@ const SignUp = () => {
             />
           </div>
 
+          <div className="flex flex-col mb-4">
+            <label className="text-white">Email*</label>
+            <input
+              type="email"
+              placeholder="Email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="mt-1 px-4 py-2 border border-green-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-700"
+              required
+            />
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div className="flex flex-col">
-              <label className="text-white">Course*</label>
-              <select
-                value={course}
-                onChange={(e) => setCourse(e.target.value)}
+              <label className="text-white">Password*</label>
+              <input
+                type="password"
+                placeholder="Password"
+                value={password}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  setPasswordError("");
+                }}
                 className="mt-1 px-4 py-2 border border-green-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-700"
                 required
-              >
-                <option value="">Select Course</option>
-                {courses.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
+              />
+              <small className="text-gray-300 mt-1">
+                Password must contain: 8+ characters, uppercase, lowercase, number, and special character
+              </small>
             </div>
-
             <div className="flex flex-col">
-              <label className="text-white">Year*</label>
-              <select
-                value={year}
-                onChange={(e) => setYear(e.target.value)}
+              <label className="text-white">Confirm Password*</label>
+              <input
+                type="password"
+                placeholder="Confirm Password"
+                value={confirmPassword}
+                onChange={(e) => {
+                  setConfirmPassword(e.target.value);
+                  setPasswordError("");
+                }}
                 className="mt-1 px-4 py-2 border border-green-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-700"
                 required
-              >
-                <option value="">Select Year</option>
-                {years.map((y) => (
-                  <option key={y} value={y}>
-                    {y}
-                  </option>
-                ))}
-              </select>
+              />
             </div>
           </div>
+
+          {passwordError && (
+            <div className="mb-4 p-2 bg-red-100 text-red-700 rounded">
+              {passwordError}
+            </div>
+          )}
 
           <div className="flex justify-center mb-4">
             <div className="relative w-48 h-48 md:w-64 md:h-64">
