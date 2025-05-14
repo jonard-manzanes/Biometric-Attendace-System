@@ -217,7 +217,7 @@ const SignUp = () => {
             descriptor,
             image: snapshot,
             email,
-            password, 
+            password,
           });
 
           Swal.fire({
@@ -297,6 +297,7 @@ const SignUp = () => {
               return false;
             }
 
+            sessionStorage.setItem("teacher-invite", "granted");
             window.location.href = "/teacher-signup";
           })
           .catch((error) => {
@@ -379,7 +380,8 @@ const SignUp = () => {
                 required
               />
               <small className="text-gray-300 mt-1">
-                Password must contain: 8+ characters, uppercase, lowercase, number, and special character
+                Password must contain: 8+ characters, uppercase, lowercase,
+                number, and special character
               </small>
             </div>
             <div className="flex flex-col">
