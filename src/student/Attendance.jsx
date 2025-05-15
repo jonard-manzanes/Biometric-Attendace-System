@@ -16,7 +16,6 @@ const Attendance = () => {
   const currentSubjectRef = useRef(null);
   const intervalRef = useRef(null);
 
-  // Load face-api.js models
   useEffect(() => {
     const loadModels = async () => {
       try {
@@ -45,7 +44,6 @@ const Attendance = () => {
     };
   }, []);
 
-  // Start/stop camera when modal opens/closes
   useEffect(() => {
     if (showFaceModal && modelsLoaded) {
       startCamera();
@@ -58,7 +56,6 @@ const Attendance = () => {
     };
   }, [showFaceModal, modelsLoaded]);
 
-  // Fetch subjects data and attendance status
   useEffect(() => {
     const fetchSubjectsAndAttendance = async () => {
       try {
@@ -90,7 +87,6 @@ const Attendance = () => {
             };
           });
 
-          // Check attendance status for this subject
           const now = new Date();
           const today = now.toISOString().split("T")[0];
           const classID = subject.joinCode || subject.subjectName.replace(/\s/g, "_");
@@ -186,7 +182,6 @@ const Attendance = () => {
               
               setTimeout(() => {
                 setShowFaceModal(false);
-                // Refresh attendance status after marking
                 fetchSubjectsAndAttendance();
               }, 1500);
             } else {
@@ -347,7 +342,6 @@ const Attendance = () => {
           };
         });
 
-        // Check attendance status for this subject
         const now = new Date();
         const today = now.toISOString().split("T")[0];
         const classID = subject.joinCode || subject.subjectName.replace(/\s/g, "_");
@@ -507,7 +501,6 @@ const Attendance = () => {
 
   return (
     <div>
-      {/* Face Verification Modal */}
       {showFaceModal && (
         <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">

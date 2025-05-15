@@ -83,7 +83,6 @@ const Profile = () => {
       const docRef = doc(db, 'users', parsedUser.docId);
       await updateDoc(docRef, formData);
       
-      // Update local storage with new data
       const updatedUser = {
         ...parsedUser,
         ...formData,

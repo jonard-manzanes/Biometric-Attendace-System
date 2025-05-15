@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Bell, Home, CalendarCheck, User, LogOut, Menu } from "lucide-react";
+import { Home, CalendarCheck, User, LogOut, Menu } from "lucide-react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../firebaseConfig";
@@ -86,7 +86,6 @@ export default function StudentLayout() {
     });
   };
 
-  // Function to get user initials
   const getUserInitials = () => {
     if (!profileData) return 'S';
     const firstInitial = profileData.firstName ? profileData.firstName.charAt(0) : '';
@@ -103,7 +102,6 @@ export default function StudentLayout() {
         ></div>
       )}
 
-      {/* Sidebar */}
       <div
         className={`${sidebarOpen ? "w-64" : "w-20"} ${
           mobileSidebarOpen ? "fixed inset-y-0 left-0 z-30" : "hidden md:block"
@@ -174,7 +172,6 @@ export default function StudentLayout() {
         </div>
       </div>
 
-      {/* Main Content */}
       <div
         className={`flex-1 ${
           !sidebarOpen && "md:ml-0"
@@ -194,10 +191,6 @@ export default function StudentLayout() {
               </h2>
             </div>
             <div className="flex items-center space-x-4">
-              <button className="p-1 md:p-2 text-gray-600 hover:text-emerald-700 relative">
-                <Bell size={20} />
-                <span className="absolute top-0 right-0 h-2 w-2 rounded-full bg-red-500"></span>
-              </button>
               <div className="flex items-center space-x-2">
                 <div className="h-8 w-8 rounded-full bg-emerald-700 flex items-center justify-center text-emerald-100 font-medium">
                   {getUserInitials()}

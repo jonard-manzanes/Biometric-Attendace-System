@@ -42,7 +42,6 @@ const Dashboard = ({ currentUser }) => {
   
     if (code) {
       try {
-        // Show loading dialog
         Swal.fire({
           title: 'Joining class...',
           allowOutsideClick: false,
