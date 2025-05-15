@@ -47,8 +47,6 @@ const Login = () => {
 
     if (password) {
       if (password === userData.password) {
-        // In production, use proper password hashing comparison
-        // Store all user data including docId
         const userToStore = {
           ...userData,
           fullName,
@@ -79,10 +77,10 @@ const Login = () => {
           title: "Incorrect Password",
           text: "The password you entered is incorrect. Please try again.",
         });
-        startScanning(); // Restart scanning
+        startScanning();
       }
     } else {
-      startScanning(); // Restart scanning if user canceled
+      startScanning(); 
     }
   };
 
@@ -127,12 +125,10 @@ const Login = () => {
               userData.middleInitial ? userData.middleInitial + " " : ""
             }${userData.lastName}`;
 
-            // Show password verification
             await verifyPassword(userData, fullName, redirectPath);
 
-            // Add a delay of 10 seconds before allowing the next scan to start
             setTimeout(() => {
-              startScanning(); // Restart scanning after the delay
+              startScanning(); 
             }, 10000);
           } else {
             clearScanning();

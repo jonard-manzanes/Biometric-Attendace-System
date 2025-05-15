@@ -249,7 +249,6 @@ const SignUp = () => {
 
       setStatus("Student registered successfully!");
 
-      // Reset form
       setFirstName("");
       setLastName("");
       setStudentId("");
