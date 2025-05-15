@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Bell, Home, CalendarCheck, User, LogOut, Menu } from "lucide-react";
+import { Home, CalendarCheck, User, LogOut, Menu } from "lucide-react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../firebaseConfig";
@@ -86,9 +86,8 @@ export default function TeacherLayout() {
     });
   };
 
-  // Function to get user initials
   const getUserInitials = () => {
-    if (!profileData) return 'T'; // Default to 'T' for Teacher
+    if (!profileData) return 'T'; 
     const firstInitial = profileData.firstName ? profileData.firstName.charAt(0) : '';
     const lastInitial = profileData.lastName ? profileData.lastName.charAt(0) : '';
     return `${firstInitial}${lastInitial}`.toUpperCase() || 'T';
@@ -103,7 +102,6 @@ export default function TeacherLayout() {
         ></div>
       )}
 
-      {/* Sidebar */}
       <div
         className={`${sidebarOpen ? "w-64" : "w-20"} ${
           mobileSidebarOpen ? "fixed inset-y-0 left-0 z-30" : "hidden md:block"
@@ -167,7 +165,6 @@ export default function TeacherLayout() {
         </div>
       </div>
 
-      {/* Main Content */}
       <div
         className={`flex-1 ${!sidebarOpen && "md:ml-0"} transition-all duration-300 ease-in-out`}
       >
@@ -185,10 +182,6 @@ export default function TeacherLayout() {
               </h2>
             </div>
             <div className="flex items-center space-x-4">
-              <button className="p-1 md:p-2 text-gray-600 hover:text-emerald-700 relative">
-                <Bell size={20} />
-                <span className="absolute top-0 right-0 h-2 w-2 rounded-full bg-red-500"></span>
-              </button>
               <div className="flex items-center space-x-2">
                 {sidebarOpen && profileData?.firstName && (
                   <span className="text-sm font-medium text-gray-700">

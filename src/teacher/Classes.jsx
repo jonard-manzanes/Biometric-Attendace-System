@@ -26,7 +26,6 @@ const dayOptions = [
   "Sunday",
 ];
 
-// New CreateClassModal Component (updated to handle both create and edit)
 const ClassModal = ({
   isOpen,
   onClose,
@@ -231,7 +230,6 @@ const ClassModal = ({
           </div>
         </div>
 
-        {/* Footer */}
         <div className="bg-gray-50 px-6 py-4 flex justify-end gap-2 border-t">
           <button
             onClick={handleClose}
@@ -258,7 +256,6 @@ const ClassModal = ({
   );
 };
 
-// Main Classes Component
 const Classes = ({ currentUser }) => {
   const [showModal, setShowModal] = useState(false);
   const [editModalData, setEditModalData] = useState(null);

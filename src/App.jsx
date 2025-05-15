@@ -30,7 +30,6 @@ function App() {
         <Route path="/signup" element={<SignUp />} />
         <Route path="/teacher-signup" element={<TeacherSignUp />} />
 
-        {/* ✅ Student Routes with layout */}
         <Route
           path="/student"
           element={
@@ -44,7 +43,6 @@ function App() {
           <Route path="profile" element={<StudentProfile />} />
         </Route>
 
-        {/* ✅ Other Roles */}
         <Route
           path="/teacher"
           element={

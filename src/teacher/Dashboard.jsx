@@ -37,12 +37,10 @@ const Dashboard = ({ currentUser }) => {
       setLoading(true);
       
       try {
-        // Fetch teacher's classes
         const q = query(collection(db, "classes"), where("teacherID", "==", userId));
         const snapshot = await getDocs(q);
         const classesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         
-        // Calculate stats
         const today = new Date().toLocaleString('en-us', { weekday: 'long' });
         const todayClasses = classesData.filter(cls => 
           cls.schedule?.some(sched => sched.day === today)
@@ -52,7 +50,6 @@ const Dashboard = ({ currentUser }) => {
           (acc, cls) => acc + (cls.studentIDs?.length || 0), 0
         );
 
-        // Get recent classes (last 3 modified)
         const sortedClasses = [...classesData].sort((a, b) => 
           b.createdAt?.toDate() - a.createdAt?.toDate()
         ).slice(0, 3);
@@ -61,7 +58,7 @@ const Dashboard = ({ currentUser }) => {
           totalClasses: classesData.length,
           todayClasses,
           totalStudents,
-          alerts: 0 // You can implement actual alert logic
+          alerts: 0 
         });
 
         setRecentClasses(sortedClasses);
@@ -81,7 +78,6 @@ const Dashboard = ({ currentUser }) => {
 
   return (
     <div className="space-y-6">
-      {/* Welcome Banner */}
       <div className="bg-white shadow rounded-2xl p-6">
         <h2 className="text-2xl font-bold text-gray-800">Welcome back, Teacher!</h2>
         
@@ -94,7 +90,6 @@ const Dashboard = ({ currentUser }) => {
         </button>
       </div>
 
-      {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white shadow rounded-xl p-5 flex items-start">
           <div className="bg-blue-100 p-3 rounded-lg mr-4">
@@ -137,7 +132,6 @@ const Dashboard = ({ currentUser }) => {
         </div>
       </div>
 
-      {/* Recent Classes */}
       <div className="bg-white shadow rounded-2xl overflow-hidden">
         <div className="p-5 border-b">
           <h3 className="text-lg font-semibold text-gray-800">Recent Classes</h3>

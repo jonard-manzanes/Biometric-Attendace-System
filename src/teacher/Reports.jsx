@@ -9,7 +9,7 @@ const Reports = ({ currentUser }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [expandedClass, setExpandedClass] = useState(null);
-  const [dateRange, setDateRange] = useState('week'); // 'week', 'month', or 'all'
+  const [dateRange, setDateRange] = useState('week');
 
   const getUserId = () => {
     const storedUserDocId = localStorage.getItem('userDocId');
@@ -53,7 +53,6 @@ const Reports = ({ currentUser }) => {
     
     for (const cls of classes) {
       try {
-        // Fetch attendance records for this class
         const attendanceQuery = query(collection(db, 'attendance'), where('classId', '==', cls.id));
         const attendanceSnapshot = await getDocs(attendanceQuery);
         
@@ -63,7 +62,6 @@ const Reports = ({ currentUser }) => {
           sessions: []
         };
 
-        // Process each attendance record
         attendanceSnapshot.forEach((doc) => {
           const data = doc.data();
           classAttendance.sessions.push({
@@ -73,7 +71,6 @@ const Reports = ({ currentUser }) => {
           classAttendance.totalSessions++;
         });
 
-        // Get student details for this class
         const studentDetails = {};
         for (const studentId of cls.studentIDs || []) {
           const studentDoc = await getDoc(doc(db, 'users', studentId));
@@ -91,7 +88,6 @@ const Reports = ({ currentUser }) => {
           }
         }
 
-        // Calculate attendance for each student
         for (const studentId in studentDetails) {
           const presentCount = classAttendance.sessions.reduce((count, session) => {
             return count + (session.presentStudents.includes(studentId) ? 1 : 0);
