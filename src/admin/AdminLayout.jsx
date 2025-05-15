@@ -151,8 +151,8 @@ export default function AdminLayout() {
             <SidebarLink
               icon={<FileText size={20} />}
               text="Code"
-              active={currentPage === "university-code"}
-              onClick={() => handleNavigate("university-code")}
+              active={currentPage === "access-codes"}
+              onClick={() => handleNavigate("access-codes")}
               sidebarOpen={sidebarOpen}
             />
             <SidebarLink

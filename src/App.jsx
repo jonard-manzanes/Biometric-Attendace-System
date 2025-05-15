@@ -16,9 +16,9 @@ import TeacherReports from "./teacher/Reports";
 
 import AdminLayout from "./admin/AdminLayout";
 import AdminDashboard from "./admin/Dashboard";
-import UniversityCode from "./admin/UniversityCode";
 import UserManagement from "./admin/UserManagement";
 import Reports from "./admin/Reports";
+import AccessCodes from "./admin/AccessCodes";
 
 
 function App() {
@@ -68,7 +68,7 @@ function App() {
         >
           <Route path="dashboard" element={<AdminDashboard />} />
           <Route path="user-management" element={<UserManagement />} />
-          <Route path="university-code" element={<UniversityCode />} />
+          <Route path="access-codes" element={<AccessCodes />} />
           <Route path="reports" element={<Reports />} />
 
         </Route>
