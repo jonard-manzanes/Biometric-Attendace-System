@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebaseConfig';
-import { collection, getDocs, query, where, getCountFromServer } from 'firebase/firestore';
+import { collection, getDocs, query, where, getCountFromServer, limit } from 'firebase/firestore';
 import { Download, Users, Book, Clock, ChevronDown } from 'lucide-react';
 
 const Reports = () => {
@@ -96,9 +96,43 @@ const Reports = () => {
     fetchReportData();
   }, [reportType, dateRange]);
 
+  const convertToCSV = (data) => {
+    if (reportType === 'user_activity') {
+      const headers = ["Metric", "Count"];
+      const rows = [
+        ["Total Users", data.totalUsers || 0],
+        ["Active Users", data.activeUsers || 0],
+        ["New Signups", data.newUsers || 0]
+      ];
+      return [headers, ...rows].map(row => row.join(",")).join("\n");
+    } else if (reportType === 'class_performance') {
+      const headers = ["Metric", "Count"];
+      const rows = [
+        ["Total Classes", data.totalClasses || 0],
+        ["Active Classes", data.activeClasses || 0],
+        ...(data.sampleClasses?.map(cls => [cls.name, `${cls.students} students`]) || [])
+      ];
+      return [headers, ...rows].map(row => row.join(",")).join("\n");
+    }
+    return "";
+  };
+
   const handleExport = () => {
-    // In a real app, this would generate a CSV/PDF
-    alert(`Exporting ${reportType} report for ${dateRange}`);
+    if (!reportData) return;
+    
+    const csvContent = convertToCSV(reportData);
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    
+    // Create filename based on report type and date range
+    const filename = `${reportType}_${dateRange}_${new Date().toISOString().split('T')[0]}.csv`;
+    link.setAttribute('download', filename);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   return (
@@ -148,9 +182,10 @@ const Reports = () => {
             <button 
               onClick={handleExport}
               className="flex items-center px-3 py-2 bg-emerald-600 text-white rounded-md text-sm"
+              disabled={!reportData}
             >
               <Download size={16} className="mr-2" />
-              Export
+              Export CSV
             </button>
           </div>
 
