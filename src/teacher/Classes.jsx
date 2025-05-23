@@ -333,8 +333,14 @@ const Classes = ({ currentUser }) => {
         subjectName,
         schedule: schedules,
       });
+      
+      Swal.fire({
+        icon: "success",
+        title: "Class updated!",
+        text: "The class has been updated successfully.",
+        confirmButtonColor: "#10b981",
+      });
 
-      alert("Class updated successfully!");
       setEditModalData(null);
       await fetchClasses();
     } catch (err) {
