@@ -1,12 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebaseConfig';
-import { collection, getCountFromServer, query, where, getDocs } from 'firebase/firestore';
-import { Users, Book, Clock, Activity, Calendar, TrendingUp } from 'lucide-react';
-import { Bar, Line, Pie } from 'react-chartjs-2';
-import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, PointElement, LineElement, ArcElement } from 'chart.js';
-
-// Register ChartJS components
-ChartJS.register(
+import { collection, getCountFromServer, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
+import { Users, Book, Clock, Activity, TrendingUp } from 'lucide-react';
+import { Bar, Line } from 'react-chartjs-2';
+import {
+  Chart as ChartJS,
   CategoryScale,
   LinearScale,
   BarElement,
@@ -14,8 +12,18 @@ ChartJS.register(
   Tooltip,
   Legend,
   PointElement,
+  LineElement
+} from 'chart.js';
+
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  PointElement,
   LineElement,
-  ArcElement
+  Title,
+  Tooltip,
+  Legend
 );
 
 const Dashboard = () => {
@@ -29,7 +37,7 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [userGrowthData, setUserGrowthData] = useState([]);
-  const [classDistributionData, setClassDistributionData] = useState([]);
+  const [classesData, setClassesData] = useState([]);
 
   useEffect(() => {
     const fetchDashboardData = async () => {
@@ -63,9 +71,9 @@ const Dashboard = () => {
         const userGrowth = await getUserGrowthData();
         setUserGrowthData(userGrowth);
 
-        // Class distribution by student count
-        const classDistribution = await getClassDistribution();
-        setClassDistributionData(classDistribution);
+        // Classes with teachers data
+        const classesWithTeachers = await getClassesWithTeachers();
+        setClassesData(classesWithTeachers);
 
         setStats({
           totalUsers: usersSnapshot.data().count,
@@ -87,7 +95,6 @@ const Dashboard = () => {
       const counts = [];
       const now = new Date();
       
-      // Get data for last 6 months
       for (let i = 5; i >= 0; i--) {
         const monthStart = new Date(now.getFullYear(), now.getMonth() - i, 1);
         const monthEnd = new Date(now.getFullYear(), now.getMonth() - i + 1, 0);
@@ -108,30 +115,43 @@ const Dashboard = () => {
       return { months, counts };
     };
 
-    const getClassDistribution = async () => {
-      const ranges = [
-        { name: '1-5 students', min: 1, max: 5 },
-        { name: '6-10 students', min: 6, max: 10 },
-        { name: '11-20 students', min: 11, max: 20 },
-        { name: '20+ students', min: 21, max: Infinity }
-      ];
+    const getClassesWithTeachers = async () => {
+      const classesSnapshot = await getDocs(collection(db, 'classes'));
+      const classes = [];
       
-      const counts = await Promise.all(
-        ranges.map(async range => {
-          const q = query(
-            collection(db, 'classes'),
-            where('studentIDs', '>=', range.min),
-            where('studentIDs', '<=', range.max === Infinity ? 999 : range.max)
-          );
-          const snapshot = await getCountFromServer(q);
-          return snapshot.data().count;
-        })
-      );
+      for (const doc of classesSnapshot.docs) {
+        const classData = doc.data();
+        let teacherName = "Unknown Teacher";
+        
+        if (classData.teacherID) {
+          try {
+            const teacherDoc = await getDoc(doc(db, 'users', classData.teacherID));
+            if (teacherDoc.exists()) {
+              teacherName = teacherDoc.data().fullName || 
+                          `${teacherDoc.data().firstName} ${teacherDoc.data().lastName}` || 
+                          "Unknown Teacher";
+            }
+          } catch (err) {
+            console.error(`Error fetching teacher ${classData.teacherID}:`, err);
+          }
+        }
+        
+        classes.push({
+          id: doc.id,
+          name: classData.subjectName || "Unnamed Class",
+          teacher: teacherName,
+          studentCount: classData.studentIDs?.length || 0,
+          joinCode: classData.joinCode || "No code"
+        });
+      }
       
-      return {
-        labels: ranges.map(r => r.name),
-        counts
-      };
+      // Sort by student count (descending) and then by class name
+      return classes.sort((a, b) => {
+        if (b.studentCount !== a.studentCount) {
+          return b.studentCount - a.studentCount;
+        }
+        return a.name.localeCompare(b.name);
+      });
     };
 
     fetchDashboardData();
@@ -152,24 +172,14 @@ const Dashboard = () => {
     ]
   };
 
-  const classDistributionChart = {
-    labels: classDistributionData.labels || [],
+  const classesChart = {
+    labels: classesData.map(cls => cls.name),
     datasets: [
       {
-        label: 'Classes',
-        data: classDistributionData.counts || [],
-        backgroundColor: [
-          'rgba(99, 102, 241, 0.7)',
-          'rgba(168, 85, 247, 0.7)',
-          'rgba(236, 72, 153, 0.7)',
-          'rgba(16, 185, 129, 0.7)'
-        ],
-        borderColor: [
-          'rgba(99, 102, 241, 1)',
-          'rgba(168, 85, 247, 1)',
-          'rgba(236, 72, 153, 1)',
-          'rgba(16, 185, 129, 1)'
-        ],
+        label: 'Students',
+        data: classesData.map(cls => cls.studentCount),
+        backgroundColor: 'rgba(99, 102, 241, 0.7)',
+        borderColor: 'rgba(99, 102, 241, 1)',
         borderWidth: 1
       }
     ]
@@ -263,18 +273,50 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* Class Distribution Chart */}
+        {/* Classes Overview Chart */}
         <div className="bg-white rounded-lg shadow-sm p-6">
-          <h2 className="text-lg font-semibold text-gray-800 mb-4">Class Size Distribution</h2>
-          <div className="h-80">
-            <Pie 
-              data={classDistributionChart}
+          <h2 className="text-lg font-semibold text-gray-800 mb-4">Classes Overview</h2>
+          <div className="h-96">
+            <Bar 
+              data={classesChart}
               options={{
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
                   legend: {
-                    position: 'right',
+                    display: false
+                  },
+                  tooltip: {
+                    callbacks: {
+                      title: (context) => classesData[context[0].dataIndex].name,
+                      afterLabel: (context) => {
+                        const data = classesData[context.dataIndex];
+                        return [
+                          `Teacher: ${data.teacher}`,
+                          `Students: ${data.studentCount}`,
+                          `Join Code: ${data.joinCode}`
+                        ].join('\n');
+                      }
+                    }
+                  }
+                },
+                scales: {
+                  y: {
+                    beginAtZero: true,
+                    title: {
+                      display: true,
+                      text: 'Number of Students'
+                    },
+                    ticks: {
+                      precision: 0
+                    }
+                  },
+                  x: {
+                    ticks: {
+                      autoSkip: false,
+                      maxRotation: 45,
+                      minRotation: 45
+                    }
                   }
                 }
               }}
@@ -311,6 +353,7 @@ const Dashboard = () => {
   );
 };
 
+// StatCard component (unchanged)
 const StatCard = ({ icon, title, value, change, color }) => {
   const colorClasses = {
     emerald: 'bg-emerald-100 text-emerald-600',
@@ -333,6 +376,7 @@ const StatCard = ({ icon, title, value, change, color }) => {
   );
 };
 
+// ActivityItem component (unchanged)
 const ActivityItem = ({ icon, title, time, color }) => {
   const colorClasses = {
     emerald: 'bg-emerald-100 text-emerald-600',

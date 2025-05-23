@@ -136,8 +136,7 @@ const Reports = () => {
   };
 
   return (
-    <div className="p-6">
-      <h1 className="text-2xl font-bold text-gray-800 mb-6">Reports</h1>
+    <>
       
       {/* Report Controls */}
       <div className="bg-white rounded-lg shadow-sm p-4 mb-6 grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -237,10 +236,9 @@ const Reports = () => {
             </div>
           )}
 
-          {/* Sample Data Table */}
           <div className="border border-gray-200 rounded-lg overflow-hidden">
             <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
-              <h3 className="text-sm font-medium">Sample Data</h3>
+              <h3 className="text-sm font-medium">Available Data</h3>
             </div>
             <div className="p-4">
               {reportType === 'user_activity' ? (
@@ -259,7 +257,7 @@ const Reports = () => {
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 };
 
