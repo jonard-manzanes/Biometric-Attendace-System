@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { db } from "../firebaseConfig";
 import {
   doc,
@@ -9,6 +9,26 @@ import {
   where,
 } from "firebase/firestore";
 import { format, parseISO, eachDayOfInterval } from "date-fns";
+// New imports for the chart
+import { Bar } from "react-chartjs-2";
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
+} from "chart.js";
+
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend
+);
 
 const Reports = () => {
   const [classes, setClasses] = useState([]);
@@ -187,8 +207,55 @@ const Reports = () => {
     });
   };
 
+  // Aggregate attendance data for chart display
+  const aggregatedData = useMemo(() => {
+    if (attendanceData.length === 0) return null;
+
+    // Get date labels from the first student's records
+    const dates = attendanceData[0].records.map((rec) => rec.date);
+    const presentCounts = dates.map((date) =>
+      attendanceData.reduce((sum, student) => {
+        const record = student.records.find((r) => r.date === date);
+        return sum + (record && record.status === "Present" ? 1 : 0);
+      }, 0)
+    );
+    const timeInOnlyCounts = dates.map((date) =>
+      attendanceData.reduce((sum, student) => {
+        const record = student.records.find((r) => r.date === date);
+        return sum + (record && record.status === "Time In Only" ? 1 : 0);
+      }, 0)
+    );
+    const absentCounts = dates.map((date) =>
+      attendanceData.reduce((sum, student) => {
+        const record = student.records.find((r) => r.date === date);
+        return sum + (record && record.status === "Absent" ? 1 : 0);
+      }, 0)
+    );
+
+    return {
+      labels: dates.map((date) => format(parseISO(date), "MMM d")),
+      datasets: [
+        {
+          label: "Present",
+          data: presentCounts,
+          backgroundColor: "green",
+        },
+        {
+          label: "Time In Only",
+          data: timeInOnlyCounts,
+          backgroundColor: "yellow",
+        },
+        {
+          label: "Absent",
+          data: absentCounts,
+          backgroundColor: "red",
+        },
+      ],
+    };
+  }, [attendanceData]);
+
   return (
-    <div className="p-6">
+    <div>
       <h1 className="text-2xl font-bold mb-6">Attendance Reports</h1>
 
       {error && (
@@ -252,80 +319,97 @@ const Reports = () => {
         </div>
       ) : (
         <div className="bg-white rounded-lg shadow overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Student
-                  </th>
-                  {attendanceData.length > 0 &&
-                    attendanceData[0].records.map((record) => (
-                      <th
-                        key={record.date}
-                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                      >
-                        {format(parseISO(record.date), "MMM d")}
-                      </th>
-                    ))}
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {attendanceData.map((student) => (
-                  <tr key={student.studentId}>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">
-                        {student.studentName}
-                      </div>
-                      <div className="text-sm text-gray-500">
-                        {student.studentId}
-                      </div>
-                    </td>
-
-                    {student.records.map((record) => (
-                      <td
-                        key={`${student.studentId}-${record.date}`}
-                        className="px-4 py-2"
-                      >
-                        <div className="flex flex-col items-center">
-                          {record.status === "Present" ? (
-                            <>
-                              <span className="text-green-600 font-medium">
-                                Present
-                              </span>
-                              <span className="text-xs text-gray-500">
-                                In: {record.timeIn || "—"}
-                              </span>
-                              <span className="text-xs text-gray-500">
-                                Out: {record.timeOut || "—"}
-                              </span>
-                            </>
-                          ) : record.status === "Time In Only" ? (
-                            <>
-                              <span className="text-yellow-600 font-medium">
-                                Time In Only
-                              </span>
-                              <span className="text-xs text-gray-500">
-                                In: {record.timeIn || "—"}
-                              </span>
-                            </>
-                          ) : (
-                            <span className="text-red-600 font-medium">
-                              Absent
-                            </span>
-                          )}
-                          {record.verificationMethod && (
-                            <span className="text-xs text-gray-400 mt-1">
-                              {record.verificationMethod}
-                            </span>
-                          )}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Student
+                    </th>
+                    {attendanceData.length > 0 &&
+                      attendanceData[0].records.map((record) => (
+                        <th
+                          key={record.date}
+                          className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                        >
+                          {format(parseISO(record.date), "MMM d")}
+                        </th>
+                      ))}
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {attendanceData.map((student) => (
+                    <tr key={student.studentId}>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm font-medium text-gray-900">
+                          {student.studentName}
+                        </div>
+                        <div className="text-sm text-gray-500">
+                          {student.studentId}
                         </div>
                       </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+
+                      {student.records.map((record) => (
+                        <td
+                          key={`${student.studentId}-${record.date}`}
+                          className="px-4 py-2"
+                        >
+                          <div className="flex flex-col items-center">
+                            {record.status === "Present" ? (
+                              <>
+                                <span className="text-green-600 font-medium">
+                                  Present
+                                </span>
+                                <span className="text-xs text-gray-500">
+                                  In: {record.timeIn || "—"}
+                                </span>
+                                <span className="text-xs text-gray-500">
+                                  Out: {record.timeOut || "—"}
+                                </span>
+                              </>
+                            ) : record.status === "Time In Only" ? (
+                              <>
+                                <span className="text-yellow-600 font-medium">
+                                  Time In Only
+                                </span>
+                                <span className="text-xs text-gray-500">
+                                  In: {record.timeIn || "—"}
+                                </span>
+                              </>
+                            ) : (
+                              <span className="text-red-600 font-medium">
+                                Absent
+                              </span>
+                            )}
+                            {record.verificationMethod && (
+                              <span className="text-xs text-gray-400 mt-1">
+                                {record.verificationMethod}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {/* Attendance Summary Chart */}
+            {aggregatedData && (
+              <div className="mt-8">
+                <h2 className="text-xl font-bold mb-4">
+                  Attendance Summary Chart
+                </h2>
+                <Bar
+                  data={aggregatedData}
+                  options={{
+                    responsive: true,
+                    plugins: { legend: { position: "top" } },
+                  }}
+                />
+              </div>
+            )}
           </div>
         </div>
       )}

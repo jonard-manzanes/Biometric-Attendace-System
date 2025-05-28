@@ -78,7 +78,7 @@ const Dashboard = ({ currentUser }) => {
 
   return (
     <div className="space-y-6">
-      <div className="bg-white shadow rounded-2xl p-6">
+      <div>
         <h2 className="text-2xl font-bold text-gray-800">Welcome back, Teacher!</h2>
         
         <button 
