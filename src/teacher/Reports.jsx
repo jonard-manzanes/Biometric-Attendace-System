@@ -1,6 +1,13 @@
 import React, { useState, useEffect } from "react";
 import { db } from "../firebaseConfig";
-import { doc, getDoc, collection, getDocs, query, where } from "firebase/firestore";
+import {
+  doc,
+  getDoc,
+  collection,
+  getDocs,
+  query,
+  where,
+} from "firebase/firestore";
 import { format, parseISO, eachDayOfInterval } from "date-fns";
 
 const Reports = () => {
@@ -27,12 +34,12 @@ const Reports = () => {
         const classesCol = collection(db, "classes");
         const q = query(classesCol, where("teacherID", "==", teacherId));
         const querySnapshot = await getDocs(q);
-        
-        const classesData = querySnapshot.docs.map(doc => ({
+
+        const classesData = querySnapshot.docs.map((doc) => ({
           id: doc.id,
-          ...doc.data()
+          ...doc.data(),
         }));
-        
+
         setClasses(classesData);
         if (classesData.length > 0) {
           setSelectedClass(classesData[0].id);
@@ -57,36 +64,39 @@ const Reports = () => {
         // Get class document
         const classRef = doc(db, "classes", selectedClass);
         const classSnap = await getDoc(classRef);
-        
         if (!classSnap.exists()) {
           setError("Class document not found");
           return;
         }
+        const classData = classSnap.data();
+        // Use joinCode or fallback to match Attendance.jsx path
+        const attendanceClassID =
+          classData.joinCode || classData.subjectName.replace(/\s/g, "_");
 
-        const studentIDs = classSnap.data()?.studentIDs || [];
+        const studentIDs = classData.studentIDs || [];
         if (studentIDs.length === 0) {
           setError("No students enrolled in this class");
           return;
         }
 
-        // Generate all dates in the selected range
+        // Generate date array from the selected dateRange
         const startDate = parseISO(dateRange.start);
         const endDate = parseISO(dateRange.end);
-        const dateArray = eachDayOfInterval({ start: startDate, end: endDate })
-          .map(date => format(date, "yyyy-MM-dd"));
+        const dateArray = eachDayOfInterval({
+          start: startDate,
+          end: endDate,
+        }).map((date) => format(date, "yyyy-MM-dd"));
 
-        // Fetch attendance for each student
+        // Fetch attendance for each student and each date
         const attendancePromises = studentIDs.map(async (studentId) => {
           try {
             // Get student info
             const studentRef = doc(db, "users", studentId);
             const studentSnap = await getDoc(studentRef);
-            
             if (!studentSnap.exists()) {
               console.warn(`Student document ${studentId} not found`);
               return null;
             }
-
             const studentData = studentSnap.data();
             if (!studentData?.firstName || !studentData?.lastName) {
               console.warn(`Student ${studentId} missing name data`);
@@ -97,39 +107,51 @@ const Reports = () => {
             const records = await Promise.all(
               dateArray.map(async (date) => {
                 try {
-                  // Correct document path based on your examples:
-                  // /attendance/DIAB649/2025-05-14/1SqhpOQ9MXCcCFrmuhmG
-                  // /attendance/HALL988/2025-05-24/JZdZP8VqFaB4OzyRytu7
-                  const attendanceRef = doc(db, "attendance", selectedClass, date, studentId);
+                  // Build attendance document path using attendanceClassID
+                  const attendanceRef = doc(
+                    db,
+                    "attendance",
+                    attendanceClassID,
+                    date,
+                    studentId
+                  );
                   const attendanceSnap = await getDoc(attendanceRef);
-                  
                   if (attendanceSnap.exists()) {
-                    const data = attendanceSnap.data();
-                    console.log("Fetched attendance data:", data); // Debug log
-                    
+                    const data = attendanceSnap.data() || {};
                     // Convert timestamps to Date objects
-                    const timeIn = data.timeIn ? new Date(data.timeIn) : null;
-                    const timeOut = data.timeOut ? new Date(data.timeOut) : null;
-
+                    let timeIn = data.timeIn
+                      ? typeof data.timeIn.toDate === "function"
+                        ? data.timeIn.toDate()
+                        : new Date(data.timeIn)
+                      : null;
+                    let timeOut = data.timeOut
+                      ? typeof data.timeOut.toDate === "function"
+                        ? data.timeOut.toDate()
+                        : new Date(data.timeOut)
+                      : null;
                     return {
                       date,
                       timeIn: timeIn ? format(timeIn, "hh:mm a") : null,
                       timeOut: timeOut ? format(timeOut, "hh:mm a") : null,
-                      verificationMethod: data.verificationMethod || data.verifiedBy || null,
-                      status: timeIn && timeOut ? "Present" : 
-                            timeIn ? "Time In Only" : "Absent"
+                      verificationMethod:
+                        data.verificationMethod || data.verifiedBy || null,
+                      status:
+                        timeIn && timeOut
+                          ? "Present"
+                          : timeIn
+                          ? "Time In Only"
+                          : "Absent",
                     };
                   }
                 } catch (err) {
                   console.error(`Error fetching attendance for ${date}:`, err);
                 }
-                
                 return {
                   date,
                   timeIn: null,
                   timeOut: null,
                   verificationMethod: null,
-                  status: "Absent"
+                  status: "Absent",
                 };
               })
             );
@@ -137,7 +159,7 @@ const Reports = () => {
             return {
               studentId,
               studentName: `${studentData.firstName} ${studentData.lastName}`,
-              records
+              records,
             };
           } catch (err) {
             console.error(`Error processing student ${studentId}:`, err);
@@ -161,14 +183,14 @@ const Reports = () => {
   const handleDateChange = (e) => {
     setDateRange({
       ...dateRange,
-      [e.target.name]: e.target.value
+      [e.target.name]: e.target.value,
     });
   };
 
   return (
     <div className="p-6">
       <h1 className="text-2xl font-bold mb-6">Attendance Reports</h1>
-      
+
       {error && (
         <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-4">
           <p>{error}</p>
@@ -179,7 +201,9 @@ const Reports = () => {
       <div className="bg-white p-4 rounded-lg shadow mb-6">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Class</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Class
+            </label>
             <select
               className="w-full p-2 border border-gray-300 rounded"
               value={selectedClass || ""}
@@ -192,9 +216,11 @@ const Reports = () => {
               ))}
             </select>
           </div>
-          
+
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Start Date
+            </label>
             <input
               type="date"
               name="start"
@@ -203,9 +229,11 @@ const Reports = () => {
               className="w-full p-2 border border-gray-300 rounded"
             />
           </div>
-          
+
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              End Date
+            </label>
             <input
               type="date"
               name="end"
@@ -231,11 +259,15 @@ const Reports = () => {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Student
                   </th>
-                  {attendanceData[0]?.records.map((record) => (
-                    <th key={record.date} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      {format(parseISO(record.date), "MMM d")}
-                    </th>
-                  ))}
+                  {attendanceData.length > 0 &&
+                    attendanceData[0].records.map((record) => (
+                      <th
+                        key={record.date}
+                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                      >
+                        {format(parseISO(record.date), "MMM d")}
+                      </th>
+                    ))}
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
@@ -249,23 +281,38 @@ const Reports = () => {
                         {student.studentId}
                       </div>
                     </td>
-                    
+
                     {student.records.map((record) => (
-                      <td key={`${student.studentId}-${record.date}`} className="px-4 py-2">
+                      <td
+                        key={`${student.studentId}-${record.date}`}
+                        className="px-4 py-2"
+                      >
                         <div className="flex flex-col items-center">
                           {record.status === "Present" ? (
                             <>
-                              <span className="text-green-600 font-medium">Present</span>
-                              <span className="text-xs text-gray-500">In: {record.timeIn || "—"}</span>
-                              <span className="text-xs text-gray-500">Out: {record.timeOut || "—"}</span>
+                              <span className="text-green-600 font-medium">
+                                Present
+                              </span>
+                              <span className="text-xs text-gray-500">
+                                In: {record.timeIn || "—"}
+                              </span>
+                              <span className="text-xs text-gray-500">
+                                Out: {record.timeOut || "—"}
+                              </span>
                             </>
                           ) : record.status === "Time In Only" ? (
                             <>
-                              <span className="text-yellow-600 font-medium">Time In Only</span>
-                              <span className="text-xs text-gray-500">In: {record.timeIn || "—"}</span>
+                              <span className="text-yellow-600 font-medium">
+                                Time In Only
+                              </span>
+                              <span className="text-xs text-gray-500">
+                                In: {record.timeIn || "—"}
+                              </span>
                             </>
                           ) : (
-                            <span className="text-red-600 font-medium">Absent</span>
+                            <span className="text-red-600 font-medium">
+                              Absent
+                            </span>
                           )}
                           {record.verificationMethod && (
                             <span className="text-xs text-gray-400 mt-1">
