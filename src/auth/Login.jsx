@@ -47,10 +47,10 @@ const Login = () => {
       },
       allowOutsideClick: () => !Swal.isLoading(),
       customClass: {
-        popup: 'rounded-lg shadow-xl',
-        confirmButton: 'px-4 py-2 rounded-lg',
-        cancelButton: 'px-4 py-2 rounded-lg'
-      }
+        popup: "rounded-lg shadow-xl",
+        confirmButton: "px-4 py-2 rounded-lg",
+        cancelButton: "px-4 py-2 rounded-lg",
+      },
     });
 
     if (password) {
@@ -91,7 +91,7 @@ const Login = () => {
         startScanning();
       }
     } else {
-      startScanning(); 
+      startScanning();
     }
   };
 
@@ -105,7 +105,7 @@ const Login = () => {
 
     // Progress bar animation
     const progressInterval = setInterval(() => {
-      setProgress(prev => {
+      setProgress((prev) => {
         if (prev >= 100) {
           clearInterval(progressInterval);
           return 100;
@@ -153,7 +153,7 @@ const Login = () => {
             await verifyPassword(userData, fullName, redirectPath);
 
             setTimeout(() => {
-              startScanning(); 
+              startScanning();
             }, 10000);
           } else {
             clearScanning();
@@ -174,14 +174,14 @@ const Login = () => {
         setShowRetry(true);
         setStatus("Error during face detection");
       }
-    }, 10000); 
+    }, 10000);
   };
 
   useEffect(() => {
     const init = async () => {
       try {
         setStatus("Loading face recognition models...");
-        
+
         await Promise.all([
           faceapi.nets.tinyFaceDetector.loadFromUri(
             "/models/tiny_face_detector_model"
@@ -277,29 +277,29 @@ const Login = () => {
 
       <div className="relative w-full max-w-md">
         <div className="relative w-full max-w-md aspect-square mx-auto rounded-2xl overflow-hidden border-4 border-emerald-400 shadow-xl">
-  <video
-    ref={videoRef}
-    autoPlay
-    muted
-    className="w-full h-full object-cover"
-  />
-  
-  {/* Camera overlay grid */}
-  <div className="absolute inset-0 pointer-events-none">
-    <div className="absolute top-1/2 left-0 right-0 h-px bg-emerald-400/50"></div>
-    <div className="absolute left-1/2 top-0 bottom-0 w-px bg-emerald-400/50"></div>
-  </div>
-</div>
+          <video
+            ref={videoRef}
+            autoPlay
+            muted
+            className="w-full h-full object-cover"
+          />
+
+          {/* Camera overlay grid */}
+          <div className="absolute inset-0 pointer-events-none">
+            <div className="absolute top-1/2 left-0 right-0 h-px bg-emerald-400/50"></div>
+            <div className="absolute left-1/2 top-0 bottom-0 w-px bg-emerald-400/50"></div>
+          </div>
+        </div>
 
         {isScanning && (
           <>
             <div className="absolute -inset-4 flex items-center justify-center pointer-events-none">
               <div className="h-88 w-88 rounded-full border-4 border-emerald-400 border-t-transparent animate-spin"></div>
             </div>
-            
+
             {/* Progress bar */}
             <div className="absolute -bottom-6 left-0 right-0 h-2 bg-emerald-900 rounded-full overflow-hidden">
-              <div 
+              <div
                 className="h-full bg-emerald-400 transition-all duration-300 ease-out"
                 style={{ width: `${progress}%` }}
               ></div>
@@ -320,7 +320,9 @@ const Login = () => {
         <>
           <div className="mt-6 w-full max-w-md space-y-4">
             <div className="bg-emerald-800/50 backdrop-blur-sm rounded-lg p-4 shadow">
-              <p className="text-center text-emerald-100 font-medium">{status}</p>
+              <p className="text-center text-emerald-100 font-medium">
+                {status}
+              </p>
             </div>
 
             {showRetry && (
@@ -332,16 +334,41 @@ const Login = () => {
                 >
                   {isScanning ? (
                     <>
-                      <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      <svg
+                        className="animate-spin h-5 w-5 text-white"
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                      >
+                        <circle
+                          className="opacity-25"
+                          cx="12"
+                          cy="12"
+                          r="10"
+                          stroke="currentColor"
+                          strokeWidth="4"
+                        ></circle>
+                        <path
+                          className="opacity-75"
+                          fill="currentColor"
+                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                        ></path>
                       </svg>
                       Scanning...
                     </>
                   ) : (
                     <>
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                        <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        className="h-5 w-5"
+                        viewBox="0 0 20 20"
+                        fill="currentColor"
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z"
+                          clipRule="evenodd"
+                        />
                       </svg>
                       Try Again
                     </>
@@ -352,20 +379,33 @@ const Login = () => {
           </div>
 
           <div className="mt-8 text-center text-white text-sm">
-            <p className="mb-2">Don't have an account?</p>
-            <a 
-              className="inline-block px-4 py-2 bg-white/10 hover:bg-white/20 text-emerald-100 rounded-lg transition-colors duration-300"
-              href="/signup"
-            >
-              Register Now
-            </a>
-          </div>
+  <p className="mb-2">Don't have an account?</p>
+  <a
+    className="inline-block px-4 py-2 bg-white/10 hover:bg-white/20 text-emerald-100 rounded-lg transition-colors duration-300"
+    href="/signup"
+  >
+    Register Now
+  </a>
+
+  {/* Optional: Add this button visibly if needed */}
+  
+  <button
+    onClick={() => (window.location.href = "/quick-attendance")}
+    className="ml-4 inline-block px-4 py-2 bg-white/10 hover:bg-white/20 text-emerald-100 rounded-lg transition-colors duration-300"
+  >
+    Quick Attendance
+  </button> 
+ 
+</div>
+
         </>
       )}
-      
+
       <div className="mt-8 text-center text-emerald-300/50 text-xs">
         <p>Ensure your face is clearly visible in the frame</p>
       </div>
+
+
     </div>
   );
 };

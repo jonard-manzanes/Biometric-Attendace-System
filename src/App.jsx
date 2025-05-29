@@ -19,6 +19,7 @@ import AdminDashboard from "./admin/Dashboard";
 import UserManagement from "./admin/UserManagement";
 import Reports from "./admin/Reports";
 import AccessCodes from "./admin/AccessCodes";
+import QuickAttendance from "./auth/quickAttendance";
 
 
 function App() {
@@ -29,6 +30,7 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<SignUp />} />
         <Route path="/teacher-signup" element={<TeacherSignUp />} />
+        <Route path="/quick-attendance" element={<QuickAttendance />} />
 
         <Route
           path="/student"
