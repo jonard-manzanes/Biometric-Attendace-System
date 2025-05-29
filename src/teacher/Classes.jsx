@@ -452,7 +452,12 @@ const Classes = ({ currentUser }) => {
     try {
       await deleteDoc(doc(db, "classes", classId));
       setClasses((prev) => prev.filter((cls) => cls.id !== classId));
-      alert("Class deleted successfully.");
+      Swal.fire({
+        icon: "success",
+        title: "Class deleted!",
+        text: "The class has been deleted successfully.",
+        confirmButtonColor: "#10b981",  
+      });
     } catch (err) {
       console.error("Error deleting class:", err);
       setError("Failed to delete class. Please try again.");
@@ -477,7 +482,12 @@ const Classes = ({ currentUser }) => {
         [classId]: prev[classId].filter((student) => student.id !== studentId),
       }));
 
-      alert("Student removed successfully.");
+      Swal.fire({
+        icon: "success",
+        title: "Student removed!",
+        text: "The student has been removed from the class successfully.",
+        confirmButtonColor: "#10b981",
+      });
     } catch (err) {
       console.error("Error removing student:", err);
       setError("Failed to remove student. Please try again.");

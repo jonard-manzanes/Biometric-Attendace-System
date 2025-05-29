@@ -1,4 +1,5 @@
 import React from 'react';
+import Swal from 'sweetalert2';
 
 const AttendanceCard = ({ subject, index, activeSubject, setActiveSubject, userRole }) => {
   const getTeacherName = () => {
@@ -11,8 +12,12 @@ const AttendanceCard = ({ subject, index, activeSubject, setActiveSubject, userR
 
   const handleDelete = () => {
     if (window.confirm(`Are you sure you want to delete ${subject.subjectName}?`)) {
-      // Replace with your delete logic
-      alert(`Deleted subject: ${subject.subjectName}`);
+      Swal.fire({
+        title: 'Deleted!',
+        text: `${subject.subjectName} has been deleted successfully.`,
+        icon: 'success',
+        confirmButtonText: 'OK'
+      });
     }
   };
 

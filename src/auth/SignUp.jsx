@@ -22,14 +22,15 @@ const SignUp = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [status, setStatus] = useState("Initializing...");
+  const [status, setStatus] = useState("Initializing camera...");
+  const [isLoading, setIsLoading] = useState(false);
   const role = "student";
   const [passwordError, setPasswordError] = useState("");
 
   useEffect(() => {
     const initModelsAndVideo = async () => {
       try {
-        setStatus("Loading models...");
+        setStatus("Loading face recognition models...");
         await Promise.all([
           faceapi.nets.tinyFaceDetector.loadFromUri(
             "/models/tiny_face_detector_model"
@@ -42,36 +43,49 @@ const SignUp = () => {
           ),
         ]);
 
+        setStatus("Accessing camera...");
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: true,
+          video: { facingMode: "user" },
         });
         videoRef.current.srcObject = stream;
-        setStatus("Models loaded. Ready to register.");
+        setStatus("Ready for registration");
       } catch (error) {
         setStatus("Failed to initialize camera or load models.");
         console.error(error);
+        Swal.fire({
+          icon: "error",
+          title: "Camera Access Required",
+          text: "Please enable camera access to continue with face registration.",
+          confirmButtonColor: "#10b981",
+        });
       }
     };
 
     initModelsAndVideo();
+
+    return () => {
+      if (videoRef.current?.srcObject) {
+        videoRef.current.srcObject.getTracks().forEach(track => track.stop());
+      }
+    };
   }, []);
 
   const validatePassword = (password) => {
     const errors = [];
     if (password.length < 8) {
-      errors.push("Password must be at least 8 characters long");
+      errors.push("at least 8 characters");
     }
     if (!/[A-Z]/.test(password)) {
-      errors.push("Password must contain at least one uppercase letter");
+      errors.push("one uppercase letter");
     }
     if (!/[a-z]/.test(password)) {
-      errors.push("Password must contain at least one lowercase letter");
+      errors.push("one lowercase letter");
     }
     if (!/[0-9]/.test(password)) {
-      errors.push("Password must contain at least one number");
+      errors.push("one number");
     }
     if (!/[!@#$%^&*(),.?":{}|<>]/.test(password)) {
-      errors.push("Password must contain at least one special character");
+      errors.push("one special character");
     }
     return errors;
   };
@@ -116,14 +130,24 @@ const SignUp = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setIsLoading(true);
 
     const passwordErrors = validatePassword(password);
     if (passwordErrors.length > 0) {
       Swal.fire({
         icon: "error",
-        title: "Password Error",
-        text: passwordErrors.join(", "),
+        title: "Password Requirements Not Met",
+        html: `
+          <div class="text-left">
+            <p class="mb-2">Your password must contain:</p>
+            <ul class="list-disc list-inside">
+              ${passwordErrors.map(err => `<li>${err}</li>`).join('')}
+            </ul>
+          </div>
+        `,
+        confirmButtonColor: "#10b981",
       });
+      setIsLoading(false);
       return;
     }
 
@@ -132,67 +156,38 @@ const SignUp = () => {
         icon: "error",
         title: "Password Mismatch",
         text: "The passwords you entered do not match.",
+        confirmButtonColor: "#10b981",
       });
+      setIsLoading(false);
       return;
     }
 
-    if (
-      !firstName.trim() ||
-      !lastName.trim() ||
-      !studentId.trim() ||
-      !email.trim()
-    ) {
+    if (!firstName.trim() || !lastName.trim() || !studentId.trim() || !email.trim()) {
       Swal.fire({
         icon: "warning",
         title: "Missing Information",
         text: "Please fill in all the required fields.",
+        confirmButtonColor: "#10b981",
       });
+      setIsLoading(false);
       return;
     }
 
-    setStatus("Scanning for face...");
-    Swal.fire({
-      title: "Scanning...",
-      text: "Please wait while we detect your face...",
-      allowOutsideClick: false,
-      didOpen: () => Swal.showLoading(),
-    });
-
-    const timeout = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error("Face detection timed out.")), 5000)
-    );
-
+    setStatus("Detecting face...");
     try {
-      const detection = await Promise.race([
-        faceapi
-          .detectSingleFace(
-            videoRef.current,
-            new faceapi.TinyFaceDetectorOptions()
-          )
-          .withFaceLandmarks()
-          .withFaceDescriptor(),
-        timeout,
-      ]);
+      const detection = await faceapi
+        .detectSingleFace(videoRef.current, new faceapi.TinyFaceDetectorOptions())
+        .withFaceLandmarks()
+        .withFaceDescriptor();
 
       if (!detection) {
-        Swal.fire({
-          icon: "error",
-          title: "No Face Detected",
-          text: "Please ensure your face is visible and well-lit.",
-        });
-        return;
+        throw new Error("No face detected. Please ensure your face is visible and well-lit.");
       }
 
       const descriptor = Array.from(detection.descriptor);
-
       const faceExists = await checkIfFaceExists(descriptor);
       if (faceExists) {
-        Swal.fire({
-          icon: "error",
-          title: "Face Already Registered",
-          text: "This face has already been registered in our system. Please contact support if this is an error.",
-        });
-        return;
+        throw new Error("This face has already been registered in our system.");
       }
 
       const snapshot = captureSnapshot();
@@ -200,32 +195,24 @@ const SignUp = () => {
 
       if (existingStudentDoc) {
         const existingStudent = existingStudentDoc.data();
-
-        if (
-          existingStudent.descriptor &&
-          existingStudent.descriptor.length > 0
-        ) {
-          Swal.fire({
-            icon: "error",
-            title: "Account Already Registered",
-            text: "This student ID is already registered with a face.",
-          });
-          return;
-        } else {
-          const userRef = doc(db, "users", existingStudentDoc.id);
-          await updateDoc(userRef, {
-            descriptor,
-            image: snapshot,
-            email,
-            password,
-          });
-
-          Swal.fire({
-            icon: "success",
-            title: "Face Registered Successfully",
-            text: "Your face has been successfully registered to your account.",
-          });
+        if (existingStudent.descriptor?.length > 0) {
+          throw new Error("This student ID is already registered with a face.");
         }
+
+        await updateDoc(doc(db, "users", existingStudentDoc.id), {
+          descriptor,
+          image: snapshot,
+          email,
+          password,
+          updatedAt: serverTimestamp(),
+        });
+
+        await Swal.fire({
+          icon: "success",
+          title: "Registration Complete",
+          text: "Your face has been successfully registered to your account.",
+          confirmButtonColor: "#10b981",
+        });
       } else {
         await addDoc(collection(db, "users"), {
           firstName,
@@ -240,204 +227,249 @@ const SignUp = () => {
           createdAt: serverTimestamp(),
         });
 
-        Swal.fire({
+        await Swal.fire({
           icon: "success",
           title: "Registration Successful",
           text: "You have been successfully registered as a student.",
+          confirmButtonColor: "#10b981",
         });
       }
 
-      setStatus("Student registered successfully!");
-
+      setStatus("Registration successful!");
       setFirstName("");
       setLastName("");
       setStudentId("");
       setEmail("");
       setPassword("");
       setConfirmPassword("");
-      setPasswordError("");
     } catch (error) {
       console.error(error);
       Swal.fire({
         icon: "error",
         title: "Registration Failed",
-        text: error.message || "An error occurred while registering.",
+        text: error.message,
+        confirmButtonColor: "#10b981",
       });
+      setStatus(error.message);
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const inviteCode = () => {
+  const handleTeacherInvite = () => {
     Swal.fire({
-      title: "Enter University Code",
-      text: "Please enter the code provided by your university.",
-      input: "text",
+      title: "University Invite Code",
+      html: `
+        <div class="text-center">
+          <p class="mb-4">Enter the invite code provided by your university</p>
+          <input 
+            type="text" 
+            id="inviteCode" 
+            class="swal2-input" 
+            placeholder="Enter code"
+          >
+          <p class="text-xs text-gray-500 mt-2">Contact your administrator if you don't have a code</p>
+        </div>
+      `,
+      focusConfirm: false,
       showCancelButton: true,
-      confirmButtonText: "Submit",
-      cancelButtonText: "Cancel",
-      preConfirm: (codeprovided) => {
-        if (!codeprovided) {
+      confirmButtonText: "Verify Code",
+      confirmButtonColor: "#10b981",
+      cancelButtonColor: "#ef4444",
+      preConfirm: () => {
+        const codeInput = Swal.getPopup().querySelector('#inviteCode');
+        if (!codeInput.value) {
           Swal.showValidationMessage("Please enter a code");
           return false;
         }
-
-        const codeNumber = Number(codeprovided);
+        return codeInput.value;
+      },
+    }).then(async (result) => {
+      if (result.isConfirmed) {
+        const codeNumber = Number(result.value);
         if (isNaN(codeNumber)) {
           Swal.showValidationMessage("Please enter a valid numeric code");
-          return false;
+          return;
         }
 
-        const uniCode = collection(db, "UniversityCode");
-        const q = query(uniCode, where("InviteCode", "==", codeNumber));
+        try {
+          const uniCode = collection(db, "UniversityCode");
+          const q = query(uniCode, where("InviteCode", "==", codeNumber));
+          const querySnapshot = await getDocs(q);
 
-        return getDocs(q)
-          .then((querySnapshot) => {
-            if (querySnapshot.empty) {
-              Swal.showValidationMessage("Invalid code provided");
-              return false;
-            }
+          if (querySnapshot.empty) {
+            throw new Error("Invalid code provided");
+          }
 
-            sessionStorage.setItem("teacher-invite", "granted");
-            window.location.href = "/teacher-signup";
-          })
-          .catch((error) => {
-            console.error("Error checking code: ", error);
-            Swal.showValidationMessage("Error checking code");
+          sessionStorage.setItem("teacher-invite", "granted");
+          window.location.href = "/teacher-signup";
+        } catch (error) {
+          Swal.fire({
+            icon: "error",
+            title: "Invalid Code",
+            text: error.message,
+            confirmButtonColor: "#10b981",
           });
-      },
+        }
+      }
     });
   };
 
   return (
-    <div className="min-h-screen bg-emerald-800 flex justify-center items-center px-4">
-      <div className="w-full max-w-4xl bg-white/10 p-6 md:p-10 rounded-xl shadow-lg backdrop-blur-2xl">
-        <h1 className="text-emerald-200 text-2xl md:text-3xl text-center mb-6 font-bold animate-bounce">
-          Student Registration
-        </h1>
-
-        <form onSubmit={handleSubmit}>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-            <div className="flex flex-col">
-              <label className="text-white">First Name*</label>
-              <input
-                type="text"
-                placeholder="First Name"
-                value={firstName}
-                onChange={(e) => setFirstName(e.target.value)}
-                className="mt-1 px-4 py-2 border border-green-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-700"
-                required
-              />
-            </div>
-            <div className="flex flex-col">
-              <label className="text-white">Last Name*</label>
-              <input
-                type="text"
-                placeholder="Last Name"
-                value={lastName}
-                onChange={(e) => setLastName(e.target.value)}
-                className="mt-1 px-4 py-2 border border-green-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-700"
-                required
-              />
-            </div>
-          </div>
-
-          <div className="flex flex-col mb-4">
-            <label className="text-white">Student ID*</label>
-            <input
-              type="text"
-              placeholder="Student ID"
-              value={studentId}
-              onChange={(e) => setStudentId(e.target.value)}
-              className="mt-1 px-4 py-2 border border-green-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-700"
-              required
-            />
-          </div>
-
-          <div className="flex flex-col mb-4">
-            <label className="text-white">Email*</label>
-            <input
-              type="email"
-              placeholder="Email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="mt-1 px-4 py-2 border border-green-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-700"
-              required
-            />
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-            <div className="flex flex-col">
-              <label className="text-white">Password*</label>
-              <input
-                type="password"
-                placeholder="Password"
-                value={password}
-                onChange={(e) => {
-                  setPassword(e.target.value);
-                  setPasswordError("");
-                }}
-                className="mt-1 px-4 py-2 border border-green-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-700"
-                required
-              />
-              <small className="text-gray-300 mt-1">
-                Password must contain: 8+ characters, uppercase, lowercase,
-                number, and special character
-              </small>
-            </div>
-            <div className="flex flex-col">
-              <label className="text-white">Confirm Password*</label>
-              <input
-                type="password"
-                placeholder="Confirm Password"
-                value={confirmPassword}
-                onChange={(e) => {
-                  setConfirmPassword(e.target.value);
-                  setPasswordError("");
-                }}
-                className="mt-1 px-4 py-2 border border-green-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-700"
-                required
-              />
-            </div>
-          </div>
-
-          {passwordError && (
-            <div className="mb-4 p-2 bg-red-100 text-red-700 rounded">
-              {passwordError}
-            </div>
-          )}
-
-          <div className="flex justify-center mb-4">
-            <div className="relative w-48 h-48 md:w-64 md:h-64">
+    <div className="min-h-screen bg-gradient-to-br from-emerald-900 to-emerald-700 flex items-center justify-center p-4 sm:p-6">
+      <div className="w-full max-w-6xl bg-white/5 backdrop-blur-md rounded-2xl shadow-xl overflow-hidden">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-0">
+          {/* Left side - Camera Preview */}
+          <div className="bg-emerald-900/30 p-6 flex flex-col items-center justify-center">
+            <div className="relative w-full max-w-xs aspect-square mb-6">
               <video
-                className="w-full h-full rounded-full border-4 border-green-500 shadow-lg object-cover"
                 ref={videoRef}
                 autoPlay
                 muted
+                className="w-full h-full rounded-xl object-cover border-4 border-emerald-400 shadow-lg"
               />
               <canvas
-                className="absolute top-0 left-0 w-full h-full rounded-full"
                 ref={canvasRef}
-                style={{ display: "none" }}
+                className="hidden"
               />
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div className="absolute inset-0 border-4 border-transparent border-dashed rounded-xl animate-pulse"></div>
+              </div>
+            </div>
+            
+            <div className="text-center w-full">
+              <p className="text-emerald-100 font-medium bg-emerald-800/50 rounded-lg py-2 px-4">
+                {status}
+              </p>
+              <p className="text-emerald-200 text-sm mt-3">
+                Position your face in the center of the frame
+              </p>
             </div>
           </div>
 
-          <p className="text-center text-white mb-4">{status}</p>
+          {/* Right side - Registration Form */}
+          <div className="bg-white/5 p-6 sm:p-8">
+            <h1 className="text-2xl sm:text-3xl font-bold text-white text-center mb-6">
+              Student Registration
+            </h1>
 
-          <div className="mt-3 py-3 text-center bg-emerald-300 rounded-md hover:bg-emerald-400 transition-colors duration-200">
-            <button type="submit" className="text-black font-semibold">
-              Register
-            </button>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-emerald-100 mb-1">First Name*</label>
+                  <input
+                    type="text"
+                    value={firstName}
+                    onChange={(e) => setFirstName(e.target.value)}
+                    className="w-full px-4 py-2 bg-white/10 border border-emerald-400/50 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-emerald-100 mb-1">Last Name*</label>
+                  <input
+                    type="text"
+                    value={lastName}
+                    onChange={(e) => setLastName(e.target.value)}
+                    className="w-full px-4 py-2 bg-white/10 border border-emerald-400/50 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-emerald-100 mb-1">Student ID*</label>
+                <input
+                  type="text"
+                  value={studentId}
+                  onChange={(e) => setStudentId(e.target.value)}
+                  className="w-full px-4 py-2 bg-white/10 border border-emerald-400/50 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-emerald-100 mb-1">Email*</label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full px-4 py-2 bg-white/10 border border-emerald-400/50 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-emerald-100 mb-1">Password*</label>
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full px-4 py-2 bg-white/10 border border-emerald-400/50 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-emerald-100 mb-1">Confirm Password*</label>
+                  <input
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="w-full px-4 py-2 bg-white/10 border border-emerald-400/50 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="bg-emerald-900/30 p-3 rounded-lg">
+                <p className="text-emerald-100 text-sm font-medium">Password Requirements:</p>
+                <ul className="text-emerald-200 text-xs list-disc list-inside mt-1">
+                  <li>Minimum 8 characters</li>
+                  <li>At least 1 uppercase letter</li>
+                  <li>At least 1 lowercase letter</li>
+                  <li>At least 1 number</li>
+                  <li>At least 1 special character</li>
+                </ul>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isLoading}
+                className={`w-full py-3 px-4 rounded-lg font-semibold transition-colors ${
+                  isLoading
+                    ? "bg-emerald-700 cursor-not-allowed"
+                    : "bg-emerald-600 hover:bg-emerald-500"
+                } text-white flex items-center justify-center`}
+              >
+                {isLoading ? (
+                  <>
+                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Processing...
+                  </>
+                ) : (
+                  "Register Now"
+                )}
+              </button>
+
+              <div className="flex flex-col sm:flex-row justify-between items-center pt-4 border-t border-emerald-800/50">
+                <a href="/login" className="text-emerald-300 hover:text-white text-sm mb-2 sm:mb-0">
+                  Already have an account? Login
+                </a>
+                <button
+                  type="button"
+                  onClick={handleTeacherInvite}
+                  className="text-emerald-300 hover:text-white text-sm font-medium"
+                >
+                  Are you a teacher? Register here
+                </button>
+              </div>
+            </form>
           </div>
-          <div className="flex justify-between text-emerald-500 mt-2 text-sm">
-            <a href="/login">Login</a>
-            <button
-              onClick={inviteCode}
-              className="text-emerald-500 hover:underline"
-            >
-              Create Teacher account?{" "}
-            </button>
-          </div>
-        </form>
+        </div>
       </div>
     </div>
   );
