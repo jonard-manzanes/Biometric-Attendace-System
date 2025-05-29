@@ -1,7 +1,14 @@
 import React, { useState, useEffect, useRef } from "react";
-import * as faceapi from 'face-api.js';
+import * as faceapi from "face-api.js";
 import { db } from "../firebaseConfig";
-import { doc, getDoc, setDoc, updateDoc, collection, getDocs } from "firebase/firestore";
+import {
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  collection,
+  getDocs,
+} from "firebase/firestore";
 import { serverTimestamp } from "firebase/firestore";
 import Swal from "sweetalert2";
 
@@ -9,7 +16,7 @@ const Attendance = () => {
   const [subjects, setSubjects] = useState([]);
   const [activeSubject, setActiveSubject] = useState(null);
   const [showFaceModal, setShowFaceModal] = useState(false);
-  const [verificationStatus, setVerificationStatus] = useState('');
+  const [verificationStatus, setVerificationStatus] = useState("");
   const [isVerifying, setIsVerifying] = useState(false);
   const [modelsLoaded, setModelsLoaded] = useState(false);
   const videoRef = useRef();
@@ -20,17 +27,23 @@ const Attendance = () => {
     const loadModels = async () => {
       try {
         await Promise.all([
-          faceapi.nets.tinyFaceDetector.loadFromUri('/models/tiny_face_detector_model'),
-          faceapi.nets.faceLandmark68Net.loadFromUri('/models/face_landmark_68_model'),
-          faceapi.nets.faceRecognitionNet.loadFromUri('/models/face_recognition_model'),
+          faceapi.nets.tinyFaceDetector.loadFromUri(
+            "/models/tiny_face_detector_model"
+          ),
+          faceapi.nets.faceLandmark68Net.loadFromUri(
+            "/models/face_landmark_68_model"
+          ),
+          faceapi.nets.faceRecognitionNet.loadFromUri(
+            "/models/face_recognition_model"
+          ),
         ]);
         setModelsLoaded(true);
       } catch (error) {
         console.error("Error loading face models:", error);
         Swal.fire({
-          icon: 'error',
-          title: 'Error',
-          text: 'Could not load face recognition models. Please refresh the page.',
+          icon: "error",
+          title: "Error",
+          text: "Could not load face recognition models. Please refresh the page.",
         });
       }
     };
@@ -63,7 +76,7 @@ const Attendance = () => {
         const querySnapshot = await getDocs(collection(db, "classes"));
         const fetchedSubjects = querySnapshot.docs
           .map((doc) => ({ id: doc.id, ...doc.data() }))
-          .filter((subject) => subject.studentIDs?.includes(studentID)); 
+          .filter((subject) => subject.studentIDs?.includes(studentID));
 
         const teacherPromises = fetchedSubjects.map(async (subject) => {
           const teacherRef = doc(db, "users", subject.teacherID);
@@ -89,17 +102,24 @@ const Attendance = () => {
 
           const now = new Date();
           const today = now.toISOString().split("T")[0];
-          const classID = subject.joinCode || subject.subjectName.replace(/\s/g, "_");
-          const attendanceRef = doc(db, "attendance", classID, today, studentID);
+          const classID =
+            subject.joinCode || subject.subjectName.replace(/\s/g, "_");
+          const attendanceRef = doc(
+            db,
+            "attendance",
+            classID,
+            today,
+            studentID
+          );
           const attendanceSnap = await getDoc(attendanceRef);
 
-          let status = 'none';
+          let status = "none";
           if (attendanceSnap.exists()) {
             const data = attendanceSnap.data();
             if (data.timeIn && data.timeOut) {
-              status = 'completed';
+              status = "completed";
             } else if (data.timeIn) {
-              status = 'timeIn';
+              status = "timeIn";
             }
           }
 
@@ -107,7 +127,7 @@ const Attendance = () => {
             ...subject,
             teacherName,
             schedule: scheduleWith12HourFormat,
-            attendanceStatus: status
+            attendanceStatus: status,
           };
         });
 
@@ -130,9 +150,9 @@ const Attendance = () => {
     } catch (err) {
       console.error("Error accessing camera:", err);
       Swal.fire({
-        icon: 'error',
-        title: 'Camera Error',
-        text: 'Could not access camera. Please check permissions.',
+        icon: "error",
+        title: "Camera Error",
+        text: "Could not access camera. Please check permissions.",
       });
       setShowFaceModal(false);
     }
@@ -140,68 +160,72 @@ const Attendance = () => {
 
   const stopCamera = () => {
     if (videoRef.current?.srcObject) {
-      videoRef.current.srcObject.getTracks().forEach(track => track.stop());
+      videoRef.current.srcObject.getTracks().forEach((track) => track.stop());
     }
   };
 
   const verifyIdentity = async () => {
     if (!currentSubjectRef.current) return;
-    
+
     setIsVerifying(true);
-    setVerificationStatus('Verifying your identity...');
+    setVerificationStatus("Verifying your identity...");
 
     try {
       const studentID = localStorage.getItem("userDocId");
       const studentRef = doc(db, "users", studentID);
       const studentDoc = await getDoc(studentRef);
-      
+
       if (!studentDoc.exists() || !studentDoc.data().descriptor) {
         throw new Error("No face data found for this student");
       }
 
       const studentDescriptor = new Float32Array(studentDoc.data().descriptor);
-      const labeledDescriptor = new faceapi.LabeledFaceDescriptors(studentID, [studentDescriptor]);
+      const labeledDescriptor = new faceapi.LabeledFaceDescriptors(studentID, [
+        studentDescriptor,
+      ]);
       const faceMatcher = new faceapi.FaceMatcher([labeledDescriptor], 0.3);
 
       intervalRef.current = setInterval(async () => {
         try {
           const detection = await faceapi
-            .detectSingleFace(videoRef.current, new faceapi.TinyFaceDetectorOptions())
+            .detectSingleFace(
+              videoRef.current,
+              new faceapi.TinyFaceDetectorOptions()
+            )
             .withFaceLandmarks()
             .withFaceDescriptor();
 
           if (detection) {
             const bestMatch = faceMatcher.findBestMatch(detection.descriptor);
-            
+
             if (bestMatch.label === studentID) {
               clearInterval(intervalRef.current);
-              setVerificationStatus('Identity verified!');
+              setVerificationStatus("Identity verified!");
               setIsVerifying(false);
-              
+
               await markAttendanceAfterVerification(currentSubjectRef.current);
-              
+
               setTimeout(() => {
                 setShowFaceModal(false);
                 fetchSubjectsAndAttendance();
               }, 1500);
             } else {
-              setVerificationStatus('Face not recognized. Please try again.');
+              setVerificationStatus("Face not recognized. Please try again.");
             }
           }
         } catch (error) {
           console.error("Verification error:", error);
-          setVerificationStatus('Error during verification');
+          setVerificationStatus("Error during verification");
         }
       }, 2000);
-
     } catch (error) {
       console.error("Verification setup error:", error);
-      setVerificationStatus('Error setting up verification');
+      setVerificationStatus("Error setting up verification");
       setIsVerifying(false);
       Swal.fire({
-        icon: 'error',
-        title: 'Verification Error',
-        text: 'Could not verify your identity. Please try again or contact support.',
+        icon: "error",
+        title: "Verification Error",
+        text: "Could not verify your identity. Please try again or contact support.",
       });
     }
   };
@@ -214,7 +238,8 @@ const Attendance = () => {
       }
 
       const now = new Date();
-      const classID = subject.joinCode || subject.subjectName.replace(/\s/g, "_");
+      const classID =
+        subject.joinCode || subject.subjectName.replace(/\s/g, "_");
       const today = now.toISOString().split("T")[0];
 
       const attendanceRef = doc(db, "attendance", classID, today, studentID);
@@ -225,7 +250,7 @@ const Attendance = () => {
         if (!data.timeOut) {
           await updateDoc(attendanceRef, {
             timeOut: serverTimestamp(),
-            verificationMethod: 'face_recognition'
+            verificationMethod: "face_recognition",
           });
           Swal.fire({
             icon: "success",
@@ -242,7 +267,7 @@ const Attendance = () => {
       } else {
         await setDoc(attendanceRef, {
           timeIn: serverTimestamp(),
-          verifiedBy: 'face_recognition',
+          verifiedBy: "face_recognition",
         });
         Swal.fire({
           icon: "success",
@@ -265,48 +290,74 @@ const Attendance = () => {
     const currentDay = now.toLocaleString("en-US", { weekday: "long" });
     const currentHours = now.getHours();
     const currentMinutes = now.getMinutes();
-    const currentTime24 = `${currentHours}:${currentMinutes < 10 ? '0' + currentMinutes : currentMinutes}`;
+    const currentTime24 = `${currentHours}:${
+      currentMinutes < 10 ? "0" + currentMinutes : currentMinutes
+    }`;
     const currentTime12 = convertTo12HourFormat(currentTime24);
     const currentTimeInMinutes = timeToMinutes(currentTime12);
+
+    // If student already timed in, allow time out only during the window (from scheduled end until 1 hour after)
+    if (subject.attendanceStatus === "timeIn") {
+      const isWithinTimeoutWindow = subject.schedule?.some((sched) => {
+        if (sched.day !== currentDay) return false;
+        const endTime = timeToMinutes(sched.end);
+        return (
+          currentTimeInMinutes >= endTime &&
+          currentTimeInMinutes <= endTime + 60
+        );
+      });
+      if (!isWithinTimeoutWindow) {
+        Swal.fire({
+          icon: "error",
+          title: "Error",
+          text: `Time out can only be marked between the class end time and within 1 hour afterwards.`,
+        });
+        return;
+      }
+    }
 
     const isWithinSchedule = subject.schedule?.some((sched) => {
       if (sched.day !== currentDay) return false;
       const startTimeInMinutes = timeToMinutes(sched.start);
       const endTimeInMinutes = timeToMinutes(sched.end);
-      return currentTimeInMinutes >= startTimeInMinutes && 
-             currentTimeInMinutes <= endTimeInMinutes;
+      return (
+        currentTimeInMinutes >= startTimeInMinutes &&
+        currentTimeInMinutes <= endTimeInMinutes
+      );
     });
 
     if (!isWithinSchedule) {
       Swal.fire({
         icon: "error",
         title: "Error",
-        text: `You can only mark attendance during your scheduled class time (${subject.schedule.map(s => `${s.day}: ${s.start} - ${s.end}`).join(', ')})`,
+        text: `You can only mark attendance during your scheduled class time (${subject.schedule
+          .map((s) => `${s.day}: ${s.start} - ${s.end}`)
+          .join(", ")})`,
       });
       return;
     }
 
     currentSubjectRef.current = subject;
     setShowFaceModal(true);
-    setVerificationStatus('Position your face in the frame');
+    setVerificationStatus("Position your face in the frame");
   };
 
   const convertTo12HourFormat = (time24) => {
     if (!time24) return "";
-    const [hours, minutes] = time24.split(':');
+    const [hours, minutes] = time24.split(":");
     const hour = parseInt(hours, 10);
-    const suffix = hour >= 12 ? 'PM' : 'AM';
+    const suffix = hour >= 12 ? "PM" : "AM";
     const hour12 = hour % 12 || 12;
     return `${hour12}:${minutes} ${suffix}`;
   };
 
   const timeToMinutes = (timeStr) => {
     if (!timeStr) return 0;
-    const [time, period] = timeStr.split(' ');
-    let [hours, minutes] = time.split(':').map(Number);
-    if (period === 'PM' && hours !== 12) {
+    const [time, period] = timeStr.split(" ");
+    let [hours, minutes] = time.split(":").map(Number);
+    if (period === "PM" && hours !== 12) {
       hours += 12;
-    } else if (period === 'AM' && hours === 12) {
+    } else if (period === "AM" && hours === 12) {
       hours = 0;
     }
     return hours * 60 + minutes;
@@ -318,7 +369,7 @@ const Attendance = () => {
       const querySnapshot = await getDocs(collection(db, "classes"));
       const fetchedSubjects = querySnapshot.docs
         .map((doc) => ({ id: doc.id, ...doc.data() }))
-        .filter((subject) => subject.studentIDs?.includes(studentID)); 
+        .filter((subject) => subject.studentIDs?.includes(studentID));
 
       const teacherPromises = fetchedSubjects.map(async (subject) => {
         const teacherRef = doc(db, "users", subject.teacherID);
@@ -344,17 +395,18 @@ const Attendance = () => {
 
         const now = new Date();
         const today = now.toISOString().split("T")[0];
-        const classID = subject.joinCode || subject.subjectName.replace(/\s/g, "_");
+        const classID =
+          subject.joinCode || subject.subjectName.replace(/\s/g, "_");
         const attendanceRef = doc(db, "attendance", classID, today, studentID);
         const attendanceSnap = await getDoc(attendanceRef);
 
-        let status = 'none';
+        let status = "none";
         if (attendanceSnap.exists()) {
           const data = attendanceSnap.data();
           if (data.timeIn && data.timeOut) {
-            status = 'completed';
+            status = "completed";
           } else if (data.timeIn) {
-            status = 'timeIn';
+            status = "timeIn";
           }
         }
 
@@ -362,7 +414,7 @@ const Attendance = () => {
           ...subject,
           teacherName,
           schedule: scheduleWith12HourFormat,
-          attendanceStatus: status
+          attendanceStatus: status,
         };
       });
 
@@ -384,16 +436,16 @@ const Attendance = () => {
 
     const getButtonText = () => {
       switch (subject.attendanceStatus) {
-        case 'timeIn':
-          return 'Time Out Now';
-        case 'completed':
-          return 'Attendance Completed';
+        case "timeIn":
+          return "Time Out Now";
+        case "completed":
+          return "Attendance Completed";
         default:
-          return 'Mark Attendance';
+          return "Mark Attendance";
       }
     };
 
-    const isButtonDisabled = subject.attendanceStatus === 'completed';
+    const isButtonDisabled = subject.attendanceStatus === "completed";
 
     return (
       <div
@@ -472,9 +524,9 @@ const Attendance = () => {
               <div className="space-y-2 mt-4">
                 <button
                   className={`w-full text-white py-2 rounded text-sm transition-colors duration-200 focus:outline-none focus:ring-2 ${
-                    isButtonDisabled 
-                      ? 'bg-gray-400 cursor-not-allowed focus:ring-gray-300' 
-                      : 'bg-emerald-500 hover:bg-emerald-600 focus:ring-emerald-300'
+                    isButtonDisabled
+                      ? "bg-gray-400 cursor-not-allowed focus:ring-gray-300"
+                      : "bg-emerald-500 hover:bg-emerald-600 focus:ring-emerald-300"
                   }`}
                   onClick={(e) => {
                     e.stopPropagation();
@@ -486,7 +538,7 @@ const Attendance = () => {
                 >
                   {getButtonText()}
                 </button>
-                {subject.attendanceStatus === 'completed' && (
+                {subject.attendanceStatus === "completed" && (
                   <p className="text-xs text-center text-gray-500 mt-1">
                     You've already recorded attendance for today
                   </p>
@@ -505,12 +557,12 @@ const Attendance = () => {
         <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
             <h2 className="text-xl font-bold mb-4">Verify Your Identity</h2>
-            
+
             <div className="relative mb-4">
-              <video 
-                ref={videoRef} 
-                autoPlay 
-                muted 
+              <video
+                ref={videoRef}
+                autoPlay
+                muted
                 className="w-full h-auto rounded border border-gray-300"
               />
               {isVerifying && (
@@ -519,9 +571,9 @@ const Attendance = () => {
                 </div>
               )}
             </div>
-            
+
             <p className="text-center mb-4 min-h-6">{verificationStatus}</p>
-            
+
             <div className="flex justify-center space-x-4">
               {!isVerifying ? (
                 <>
