@@ -123,19 +123,7 @@ const QuickAttendance = () => {
             setStatus(`Recognized: ${match.label}`);
             const userData = users[match.label];
             if (userData) {
-              const fullName = `${userData.firstName} ${
-                userData.middle ? userData.middle + " " : ""
-              }${userData.lastName}`;
-              const verified = await verifyPassword(userData, fullName);
-              if (verified) {
-                markAttendance(userData);
-              } else {
-                setStatus("Password verification failed. Try again.");
-                setTimeout(() => {
-                  setIsScanning(true);
-                  startRecognition(matcher, users);
-                }, 2000);
-              }
+              markAttendance(userData);
             }
           }
         }
@@ -143,40 +131,6 @@ const QuickAttendance = () => {
         console.error("Recognition error:", error);
       }
     }, 5000);
-  };
-
-  const verifyPassword = async (userData, fullName) => {
-    const { value: password } = await Swal.fire({
-      title: "Password Verification",
-      text: `Please enter the password for ${fullName}`,
-      input: "password",
-      inputPlaceholder: "Enter your password",
-      showCancelButton: true,
-      confirmButtonText: "Verify",
-      confirmButtonColor: "#10b981",
-      cancelButtonColor: "#ef4444",
-      preConfirm: (inputPassword) => {
-        if (!inputPassword) {
-          Swal.showValidationMessage("Password is required");
-        }
-        return inputPassword;
-      },
-    });
-
-    if (password) {
-      if (password === userData.password) {
-        return true;
-      } else {
-        Swal.fire({
-          icon: "error",
-          title: "Incorrect Password",
-          text: "The password you entered is incorrect.",
-          confirmButtonColor: "#10b981",
-        });
-        return false;
-      }
-    }
-    return false;
   };
 
   const markAttendance = async (userData) => {
