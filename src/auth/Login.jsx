@@ -378,7 +378,7 @@ const Login = () => {
             )}
           </div>
 
-          <div className="mt-8 text-center text-white text-sm">
+          <div className="mt-2 text-center text-white text-sm">
   <p className="mb-2">Don't have an account?</p>
   <a
     className="inline-block px-4 py-2 bg-white/10 hover:bg-white/20 text-emerald-100 rounded-lg transition-colors duration-300"
