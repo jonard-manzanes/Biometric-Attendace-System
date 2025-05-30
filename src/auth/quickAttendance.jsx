@@ -259,28 +259,6 @@ const QuickAttendance = () => {
       if (attendanceSnap.exists()) {
         const data = attendanceSnap.data();
         if (!data.timeOut) {
-          // Allow time out only if current time is between the scheduled end and 60 minutes after
-          const isWithinTimeoutWindow = subject.schedule?.some((sched) => {
-            if (sched.day !== currentDay) return false;
-            const endTime = timeToMinutes(convertTo12HourFormat(sched.end));
-            return (
-              currentTimeInMinutes >= endTime &&
-              currentTimeInMinutes <= endTime + 60
-            );
-          });
-          if (!isWithinTimeoutWindow) {
-            Swal.fire({
-              icon: "error",
-              title: "Error",
-              text: `Attendance can only be marked between the scheduled class end and 1 hour after (e.g., if the class ends at ${subject.schedule
-                .filter((s) => s.day === currentDay)
-                .map((s) => s.end)
-                .join(", ")}, then between that time and one hour later).`,
-            });
-            setStatus("Not within the permitted time window.");
-            return;
-          }
-
           const result = await Swal.fire({
             title: "Confirm Time-out",
             text: "Are you sure you want to time out?",
@@ -381,7 +359,9 @@ const QuickAttendance = () => {
       ) : (
         <div className="mt-6 w-full max-w-md space-y-4">
           <div className="bg-emerald-800/50 backdrop-blur-sm rounded-lg p-4 shadow">
-            <p className="text-center text-emerald-100 font-medium">{status}</p>
+            <p className="text-center text-emerald-100 font-medium">
+              {status}
+            </p>
           </div>
 
           <div className="text-center">
