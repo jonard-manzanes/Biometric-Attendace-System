@@ -219,24 +219,19 @@ const QuickAttendance = () => {
         const data = attendanceSnap.data();
         if (!data.timeOut) {
           // Allow time out only if current time is between the scheduled end and 60 minutes after
-          // Helper function to calculate the timeout window for a given schedule
-          const getTimeoutWindow = (sched) => {
-            const endTime = timeToMinutes(convertTo12HourFormat(sched.end));
-            return { start: endTime, end: endTime + 60 };
-          };
-
           const isWithinTimeoutWindow = subject.schedule?.some((sched) => {
             if (sched.day !== currentDay) return false;
-            const { start, end } = getTimeoutWindow(sched);
-            // Use > start to ensure the time-out is after the scheduled end
-            return currentTimeInMinutes > start && currentTimeInMinutes <= end;
+            const endTime = timeToMinutes(convertTo12HourFormat(sched.end));
+            return (
+              currentTimeInMinutes >= endTime &&
+              currentTimeInMinutes <= endTime + 60
+            );
           });
-
           if (!isWithinTimeoutWindow) {
             Swal.fire({
               icon: "error",
               title: "Error",
-              text: `Time-out can only be marked between the scheduled class end and 1 hour after (e.g., if the class ends at ${subject.schedule
+              text: `Attendance can only be marked between the scheduled class end and 1 hour after (e.g., if the class ends at ${subject.schedule
                 .filter((s) => s.day === currentDay)
                 .map((s) => s.end)
                 .join(", ")}, then between that time and one hour later).`,
