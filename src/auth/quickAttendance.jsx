@@ -166,12 +166,54 @@ const QuickAttendance = () => {
       const currentTimeInMinutes = timeToMinutes(currentTime12);
 
       const classSnapshot = await getDocs(collection(db, "classes"));
-      const matchingSubjects = [];
-      classSnapshot.forEach((docSnap) => {
-        const subject = docSnap.data();
-        if (subject.studentIDs && subject.studentIDs.includes(userData.docId)) {
-          if (subject.schedule && Array.isArray(subject.schedule)) {
-            const matchedSchedule = subject.schedule.find((sched) => {
+      let subject = null;
+
+      if (attendanceSnap.exists()) {
+        // Timeout branch: find subject with today's schedule where current time is within [end, end+60]
+        classSnapshot.forEach((docSnap) => {
+          if (!subject) {
+            const subj = docSnap.data();
+            if (
+              subj.studentIDs &&
+              subj.studentIDs.includes(userData.docId) &&
+              subj.schedule
+            ) {
+              subj.schedule.forEach((sched) => {
+                if (sched.day === currentDay) {
+                  const endTime = timeToMinutes(
+                    convertTo12HourFormat(sched.end)
+                  );
+                  if (
+                    currentTimeInMinutes >= endTime &&
+                    currentTimeInMinutes <= endTime + 60
+                  ) {
+                    subject = { ...subj, id: docSnap.id };
+                  }
+                }
+              });
+            }
+          }
+        });
+        if (!subject) {
+          Swal.fire({
+            icon: "error",
+            title: "Error",
+            text: "Attendance can only be marked between the scheduled class end and 1 hour after.",
+          });
+          setStatus("Not within the permitted timeout window.");
+          return;
+        }
+      } else {
+        // Time in branch: find subject with today's schedule where current time is within [start, end]
+        const matchingSubjects = [];
+        classSnapshot.forEach((docSnap) => {
+          const subj = docSnap.data();
+          if (
+            subj.studentIDs &&
+            subj.studentIDs.includes(userData.docId) &&
+            subj.schedule
+          ) {
+            const matchedSchedule = subj.schedule.find((sched) => {
               if (sched.day !== currentDay) return false;
               const startInMinutes = timeToMinutes(
                 convertTo12HourFormat(sched.start)
@@ -185,24 +227,23 @@ const QuickAttendance = () => {
               );
             });
             if (matchedSchedule) {
-              matchingSubjects.push({ ...subject, id: docSnap.id });
+              matchingSubjects.push({ ...subj, id: docSnap.id });
             }
           }
-        }
-      });
-
-      if (matchingSubjects.length === 0) {
-        Swal.fire({
-          icon: "error",
-          title: "No Scheduled Class",
-          text: "You do not have any class scheduled for now.",
-          confirmButtonColor: "#10b981",
         });
-        setStatus("No scheduled class found.");
-        return;
+        if (matchingSubjects.length === 0) {
+          Swal.fire({
+            icon: "error",
+            title: "No Scheduled Class",
+            text: "You do not have any class scheduled for now.",
+            confirmButtonColor: "#10b981",
+          });
+          setStatus("No scheduled class found.");
+          return;
+        }
+        subject = matchingSubjects[0];
       }
 
-      const subject = matchingSubjects[0];
       const classID =
         subject.joinCode || subject.subjectName.replace(/\s/g, "_");
       const today = now.toISOString().split("T")[0];
