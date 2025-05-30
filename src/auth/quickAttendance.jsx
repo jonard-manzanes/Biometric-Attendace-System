@@ -218,12 +218,12 @@ const QuickAttendance = () => {
       if (attendanceSnap.exists()) {
         const data = attendanceSnap.data();
         if (!data.timeOut) {
-          // Allow time out only if current time is after the scheduled class end and within 60 minutes after
+          // Allow time out only if current time is between the scheduled end and 60 minutes after
           const isWithinTimeoutWindow = subject.schedule?.some((sched) => {
             if (sched.day !== currentDay) return false;
             const endTime = timeToMinutes(convertTo12HourFormat(sched.end));
             return (
-              currentTimeInMinutes > endTime && // change: strict greater than scheduled end
+              currentTimeInMinutes >= endTime &&
               currentTimeInMinutes <= endTime + 60
             );
           });
