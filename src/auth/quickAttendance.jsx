@@ -167,83 +167,243 @@ const QuickAttendance = () => {
 
       const classSnapshot = await getDocs(collection(db, "classes"));
       let subject = null;
+      let teacherName = "Unknown Teacher";
 
-      if (attendanceSnap.exists()) {
-        // Timeout branch: find subject with today's schedule where current time is within [end, end+60]
-        classSnapshot.forEach((docSnap) => {
-          if (!subject) {
-            const subj = docSnap.data();
-            if (
-              subj.studentIDs &&
-              subj.studentIDs.includes(userData.docId) &&
-              subj.schedule
-            ) {
-              subj.schedule.forEach((sched) => {
-                if (sched.day === currentDay) {
-                  const endTime = timeToMinutes(
-                    convertTo12HourFormat(sched.end)
-                  );
-                  if (
-                    currentTimeInMinutes >= endTime &&
-                    currentTimeInMinutes <= endTime + 60
-                  ) {
-                    subject = { ...subj, id: docSnap.id };
-                  }
-                }
-              });
-            }
-          }
-        });
-        if (!subject) {
-          Swal.fire({
-            icon: "error",
-            title: "Error",
-            text: "Attendance can only be marked between the scheduled class end and 1 hour after.",
-          });
-          setStatus("Not within the permitted timeout window.");
-          return;
-        }
-      } else {
-        // Time in branch: find subject with today's schedule where current time is within [start, end]
-        const matchingSubjects = [];
-        classSnapshot.forEach((docSnap) => {
-          const subj = docSnap.data();
+      // First check if the user has already timed in today
+      let hasTimedInToday = false;
+      let timedInSubjectId = null;
+      let timeInData = null;
+
+      // Check all classes to see if user has already timed in
+      for (const docSnap of classSnapshot.docs) {
+        const subj = docSnap.data();
+        if (subj.studentIDs && subj.studentIDs.includes(userData.docId)) {
+          const classID = subj.joinCode || subj.subjectName.replace(/\s/g, "_");
+          const today = now.toISOString().split("T")[0];
+          const attendanceRef = doc(
+            db,
+            "attendance",
+            classID,
+            today,
+            userData.docId
+          );
+          const attendanceSnap = await getDoc(attendanceRef);
+
           if (
-            subj.studentIDs &&
-            subj.studentIDs.includes(userData.docId) &&
-            subj.schedule
+            attendanceSnap.exists() &&
+            attendanceSnap.data().timeIn &&
+            !attendanceSnap.data().timeOut
           ) {
-            const matchedSchedule = subj.schedule.find((sched) => {
-              if (sched.day !== currentDay) return false;
-              const startInMinutes = timeToMinutes(
-                convertTo12HourFormat(sched.start)
-              );
-              const endInMinutes = timeToMinutes(
-                convertTo12HourFormat(sched.end)
-              );
-              return (
-                currentTimeInMinutes >= startInMinutes &&
-                currentTimeInMinutes <= endInMinutes
-              );
-            });
-            if (matchedSchedule) {
-              matchingSubjects.push({ ...subj, id: docSnap.id });
-            }
+            hasTimedInToday = true;
+            timedInSubjectId = docSnap.id;
+            timeInData = attendanceSnap.data();
+            break;
           }
-        });
-        if (matchingSubjects.length === 0) {
-          Swal.fire({
-            icon: "error",
-            title: "No Scheduled Class",
-            text: "You do not have any class scheduled for now.",
-            confirmButtonColor: "#10b981",
-          });
-          setStatus("No scheduled class found.");
-          return;
         }
-        subject = matchingSubjects[0];
       }
 
+      if (hasTimedInToday) {
+        // Time-out logic
+        const timedInClassDoc = await getDoc(
+          doc(db, "classes", timedInSubjectId)
+        );
+        const timedInClass = timedInClassDoc.data();
+
+        // Get teacher name
+        const teacherDoc = await getDoc(
+          doc(db, "users", timedInClass.teacherID)
+        );
+        if (teacherDoc.exists()) {
+          const teacherData = teacherDoc.data();
+          teacherName = `${teacherData.firstName} ${teacherData.lastName}`;
+        }
+
+        // Find today's schedule for the timed-in class
+        const todaysSchedule = timedInClass.schedule?.find(
+          (s) => s.day === currentDay
+        );
+
+        if (todaysSchedule) {
+          const endTime = timeToMinutes(
+            convertTo12HourFormat(todaysSchedule.end)
+          );
+
+          // Prevent time-out before class ends
+          if (currentTimeInMinutes <= endTime) {
+            Swal.fire({
+              icon: "error",
+              title: "Too Early to Time Out",
+              html: `
+                <div class="text-left">
+                  <p>You cannot time out before the class ends.</p>
+                  <p><span class="text-gray-600">Scheduled End:</span> ${convertTo12HourFormat(
+                    todaysSchedule.end
+                  )}</p>
+                </div>
+              `,
+              confirmButtonColor: "#10b981",
+            });
+            setStatus("Time-out not allowed before class ends.");
+            return;
+          }
+
+          // Allow time-out within 20 minutes after class ends
+          if (currentTimeInMinutes > endTime + 20) {
+            Swal.fire({
+              icon: "error",
+              title: "Too Late to Time Out",
+              html: `
+                <div class="text-left">
+                  <p class="mb-4">You can only time out within 20 minutes after your class has ended.</p>
+                  <div class="bg-gray-100 p-4 rounded-lg">
+                    <p class="font-semibold">Class Details:</p>
+                    <p><span class="text-gray-600">Class:</span> ${
+                      timedInClass.subjectName
+                    }</p>
+                    <p><span class="text-gray-600">Instructor:</span> ${teacherName}</p>
+                    <p><span class="text-gray-600">Scheduled End:</span> ${convertTo12HourFormat(
+                      todaysSchedule.end
+                    )}</p>
+                    <p><span class="text-gray-600">Your Time-in:</span> ${timeInData.timeIn
+                      ?.toDate()
+                      .toLocaleTimeString()}</p>
+                    <p><span class="text-gray-600">Current Time:</span> ${now.toLocaleTimeString()}</p>
+                  </div>
+                </div>
+              `,
+              confirmButtonColor: "#10b981",
+            });
+            setStatus("Time-out window has passed.");
+            return;
+          }
+
+          // Proceed with time-out
+          const classID =
+            timedInClass.joinCode ||
+            timedInClass.subjectName.replace(/\s/g, "_");
+          const today = now.toISOString().split("T")[0];
+          const attendanceRef = doc(
+            db,
+            "attendance",
+            classID,
+            today,
+            userData.docId
+          );
+
+          const result = await Swal.fire({
+            title: "Confirm Time Out",
+            html: `
+              <div class="text-left">
+                <p class="mb-4">Are you sure you want to time out of this class?</p>
+                <div class="bg-gray-100 p-4 rounded-lg">
+                  <p class="font-semibold">Attendance Details:</p>
+                  <p><span class="text-gray-600">Class:</span> ${
+                    timedInClass.subjectName
+                  }</p>
+                  <p><span class="text-gray-600">Instructor:</span> ${teacherName}</p>
+                  <p><span class="text-gray-600">Time-in:</span> ${timeInData.timeIn
+                    ?.toDate()
+                    .toLocaleTimeString()}</p>
+                  <p><span class="text-gray-600">Current Time:</span> ${now.toLocaleTimeString()}</p>
+                  <p><span class="text-gray-600">Duration:</span> ${Math.floor(
+                    (now - timeInData.timeIn?.toDate()) / 60000
+                  )} minutes</p>
+                </div>
+              </div>
+            `,
+            icon: "question",
+            showCancelButton: true,
+            confirmButtonText: "Yes, Time Out",
+            cancelButtonText: "Cancel",
+            confirmButtonColor: "#10b981",
+            cancelButtonColor: "#ef4444",
+            focusConfirm: false,
+            allowOutsideClick: false,
+          });
+
+          if (result.isConfirmed) {
+            await updateDoc(attendanceRef, {
+              timeOut: serverTimestamp(),
+              verificationMethod: "face_recognition",
+            });
+            Swal.fire({
+              icon: "success",
+              title: "Time Out Recorded",
+              html: `
+                <div class="text-left">
+                  <p class="mb-4">Your time-out has been recorded successfully!</p>
+                  <div class="bg-gray-100 p-4 rounded-lg">
+                    <p class="font-semibold">Attendance Summary:</p>
+                    <p><span class="text-gray-600">Class:</span> ${
+                      timedInClass.subjectName
+                    }</p>
+                    <p><span class="text-gray-600">Instructor:</span> ${teacherName}</p>
+                    <p><span class="text-gray-600">Time-in:</span> ${timeInData.timeIn
+                      ?.toDate()
+                      .toLocaleTimeString()}</p>
+                    <p><span class="text-gray-600">Time-out:</span> ${now.toLocaleTimeString()}</p>
+                    <p><span class="text-gray-600">Total Duration:</span> ${Math.floor(
+                      (now - timeInData.timeIn?.toDate()) / 60000
+                    )} minutes</p>
+                  </div>
+                </div>
+              `,
+              confirmButtonColor: "#10b981",
+            });
+            setStatus("Time-out completed.");
+          } else {
+            setStatus("Time-out canceled.");
+          }
+          return;
+        }
+      }
+
+      // Time-in logic (no existing time-in record found)
+      const matchingSubjects = [];
+      classSnapshot.forEach((docSnap) => {
+        const subj = docSnap.data();
+        if (
+          subj.studentIDs &&
+          subj.studentIDs.includes(userData.docId) &&
+          subj.schedule
+        ) {
+          const matchedSchedule = subj.schedule.find((sched) => {
+            if (sched.day !== currentDay) return false;
+            const startInMinutes = timeToMinutes(
+              convertTo12HourFormat(sched.start)
+            );
+            const endInMinutes = timeToMinutes(
+              convertTo12HourFormat(sched.end)
+            );
+            return (
+              currentTimeInMinutes >= startInMinutes &&
+              currentTimeInMinutes <= endInMinutes
+            );
+          });
+          if (matchedSchedule) {
+            matchingSubjects.push({ ...subj, id: docSnap.id });
+          }
+        }
+      });
+
+      if (matchingSubjects.length === 0) {
+        Swal.fire({
+          icon: "error",
+          title: "No Scheduled Class",
+          html: `
+            <div class="text-left">
+              <p>You do not have any class scheduled for now.</p>
+              <p class="mt-2"><strong>Current Time:</strong> ${now.toLocaleTimeString()}</p>
+              <p><strong>Day:</strong> ${currentDay}</p>
+            </div>
+          `,
+          confirmButtonColor: "#10b981",
+        });
+        setStatus("No scheduled class found.");
+        return;
+      }
+
+      subject = matchingSubjects[0];
       const classID =
         subject.joinCode || subject.subjectName.replace(/\s/g, "_");
       const today = now.toISOString().split("T")[0];
@@ -254,64 +414,86 @@ const QuickAttendance = () => {
         today,
         userData.docId
       );
-      const attendanceSnap = await getDoc(attendanceRef);
 
-      if (attendanceSnap.exists()) {
-        const data = attendanceSnap.data();
-        if (!data.timeOut) {
-          const result = await Swal.fire({
-            title: "Confirm Time-out",
-            text: "Are you sure you want to time out?",
-            icon: "warning",
-            showCancelButton: true,
-            confirmButtonText: "Yes, time out",
-            cancelButtonText: "Cancel",
-            confirmButtonColor: "#10b981",
-            cancelButtonColor: "#ef4444",
-          });
+      // Get teacher name for time-in confirmation
+      const teacherDoc = await getDoc(doc(db, "users", subject.teacherID));
+      if (teacherDoc.exists()) {
+        const teacherData = teacherDoc.data();
+        teacherName = `${teacherData.firstName} ${teacherData.lastName}`;
+      }
 
-          if (result.isConfirmed) {
-            await updateDoc(attendanceRef, {
-              timeOut: serverTimestamp(),
-              verificationMethod: "face_recognition",
-            });
-            Swal.fire({
-              icon: "success",
-              title: "Success",
-              text: "Time-out recorded successfully!",
-              confirmButtonColor: "#10b981",
-            });
-          } else {
-            setStatus("Time out canceled.");
-            return;
-          }
-        } else {
-          Swal.fire({
-            icon: "info",
-            title: "Already Recorded",
-            text: "Attendance already marked for today.",
-            confirmButtonColor: "#10b981",
-          });
-        }
-      } else {
+      const todaysSchedule = subject.schedule.find((s) => s.day === currentDay);
+
+      const result = await Swal.fire({
+        title: "Confirm Time In",
+        html: `
+          <div class="text-left">
+            <p class="mb-4">Are you sure you want to time in to this class?</p>
+            <div class="bg-gray-100 p-4 rounded-lg">
+              <p class="font-semibold">Class Details:</p>
+              <p><span class="text-gray-600">Class:</span> ${
+                subject.subjectName
+              }</p>
+              <p><span class="text-gray-600">Instructor:</span> ${teacherName}</p>
+              <p><span class="text-gray-600">Schedule:</span> ${convertTo12HourFormat(
+                todaysSchedule.start
+              )} - ${convertTo12HourFormat(todaysSchedule.end)}</p>
+              <p><span class="text-gray-600">Current Time:</span> ${now.toLocaleTimeString()}</p>
+            </div>
+          </div>
+        `,
+        icon: "question",
+        showCancelButton: true,
+        confirmButtonText: "Yes, Time In",
+        cancelButtonText: "Cancel",
+        confirmButtonColor: "#10b981",
+        cancelButtonColor: "#ef4444",
+        focusConfirm: false,
+        allowOutsideClick: false,
+      });
+
+      if (result.isConfirmed) {
         await setDoc(attendanceRef, {
           timeIn: serverTimestamp(),
           verifiedBy: "face_recognition",
         });
+
         Swal.fire({
           icon: "success",
-          title: "Success",
-          text: "Attendance marked successfully!",
+          title: "Time In Recorded",
+          html: `
+            <div class="text-left">
+              <p class="mb-4">Your attendance has been marked successfully!</p>
+              <div class="bg-gray-100 p-4 rounded-lg">
+                <p class="font-semibold">Attendance Details:</p>
+                <p><span class="text-gray-600">Class:</span> ${
+                  subject.subjectName
+                }</p>
+                <p><span class="text-gray-600">Instructor:</span> ${teacherName}</p>
+                <p><span class="text-gray-600">Time-in:</span> ${now.toLocaleTimeString()}</p>
+                <p><span class="text-gray-600">Schedule:</span> ${convertTo12HourFormat(
+                  todaysSchedule.start
+                )} - ${convertTo12HourFormat(todaysSchedule.end)}</p>
+              </div>
+            </div>
+          `,
           confirmButtonColor: "#10b981",
         });
+        setStatus("Time-in completed.");
+      } else {
+        setStatus("Time-in canceled.");
       }
-      setStatus("Attendance process completed.");
     } catch (error) {
       console.error("Attendance error:", error);
       Swal.fire({
         icon: "error",
         title: "Attendance Error",
-        text: "Failed to mark attendance.",
+        html: `
+          <div class="text-left">
+            <p>Failed to mark attendance.</p>
+            <p class="mt-2"><strong>Error:</strong> ${error.message}</p>
+          </div>
+        `,
         confirmButtonColor: "#10b981",
       });
       setStatus("Attendance failed.");
@@ -359,9 +541,7 @@ const QuickAttendance = () => {
       ) : (
         <div className="mt-6 w-full max-w-md space-y-4">
           <div className="bg-emerald-800/50 backdrop-blur-sm rounded-lg p-4 shadow">
-            <p className="text-center text-emerald-100 font-medium">
-              {status}
-            </p>
+            <p className="text-center text-emerald-100 font-medium">{status}</p>
           </div>
 
           <div className="text-center">
