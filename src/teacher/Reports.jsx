@@ -373,7 +373,7 @@ const Reports = () => {
     }
   };
 
-  // Download attendance report as CSV
+  // Download attendance report as CSV for the selected date range
   const downloadAttendanceReport = () => {
     if (!selectedClass || attendanceData.length === 0) return;
 
@@ -381,54 +381,57 @@ const Reports = () => {
     const classInfo = classes.find((c) => c.id === selectedClass);
     if (!classInfo) return;
 
-    // Get current date
-    const today = format(new Date(), "yyyy-MM-dd");
-
-    // Filter attendance data for today
-    const todayAttendance = attendanceData.map((student) => {
-      const todayRecord = student.records.find(
-        (record) => record.date === today
-      );
-      return {
-        studentName: student.studentName,
-        status: todayRecord ? todayRecord.status : "Absent",
-        timeIn: todayRecord ? todayRecord.timeIn || "-" : "-",
-        timeOut: todayRecord ? todayRecord.timeOut || "-" : "-",
-        excuse: todayRecord?.excuse?.reason || "-",
-      };
-    });
+    // Get date range
+    const startDate = dateRange.start;
+    const endDate = dateRange.end;
 
     // Prepare CSV content
+    const headers = ["Student Name"];
+    const dateColumns = attendanceData[0].records.map(record => record.date);
+    
+    // Add date columns to headers
+    dateColumns.forEach(date => {
+      headers.push(format(parseISO(date), "MMM d (EEEE)"));
+    });
+
+    // Prepare student rows
+    const studentRows = attendanceData.map(student => {
+      const row = [student.studentName];
+      student.records.forEach(record => {
+        let status = record.status;
+        if (record.timeIn) status += ` (In: ${record.timeIn})`;
+        if (record.timeOut) status += ` (Out: ${record.timeOut})`;
+        if (record.excuse) status += ` [Excuse: ${record.excuse.reason}]`;
+        row.push(status);
+      });
+      return row;
+    });
+
+    // Combine all data
     const csvContent = [
       ["Attendance Report", "", "", "", ""],
-      ["Date:", today, "", "", ""],
+      ["Date Range:", `${startDate} to ${endDate}`, "", "", ""],
       ["Subject:", classInfo.subjectName, "", "", ""],
       [
         "Instructor:",
         teacherInfo ? `${teacherInfo.firstName} ${teacherInfo.lastName}` : "",
         "",
         "",
-        "",
+        ""
       ],
       [
         "Class Schedule:",
         classSchedule.map((s) => `${s.day} ${s.start}-${s.end}`).join(", "),
         "",
         "",
-        "",
+        ""
       ],
       ["Holidays:", holidays.map(h => `${h.date}: ${h.description}`).join("; "), "", "", ""],
       ["", "", "", "", ""],
-      ["Student Name", "Status", "Time In", "Time Out", "Excuse Reason"],
-      ...todayAttendance.map((student) => [
-        student.studentName,
-        student.status,
-        student.timeIn,
-        student.timeOut,
-        student.excuse,
-      ]),
+      headers,
+      ...studentRows
     ]
-      .map((row) => row.join(","))
+      .map(row => row.join(","))
       .join("\n");
 
     // Create download link
@@ -438,7 +441,7 @@ const Reports = () => {
     link.setAttribute("href", url);
     link.setAttribute(
       "download",
-      `attendance_${classInfo.subjectName}_${today}.csv`
+      `attendance_${classInfo.subjectName}_${startDate}_to_${endDate}.csv`
     );
     link.style.visibility = "hidden";
     document.body.appendChild(link);
@@ -534,7 +537,7 @@ const Reports = () => {
   };
 
   return (
-    <div >
+    <div>
       <h1 className="text-2xl font-bold mb-2">Attendance Reports</h1>
       {error && (
         <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-4">
@@ -685,7 +688,7 @@ const Reports = () => {
             className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2 px-4 rounded"
             disabled={loading || !selectedClass || attendanceData.length === 0}
           >
-            Download Today's Attendance
+            Download Attendance Report
           </button>
         </div>
       </div>
