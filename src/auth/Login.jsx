@@ -3,9 +3,9 @@ import * as faceapi from "face-api.js";
 import Swal from "sweetalert2";
 import { db } from "../firebaseConfig";
 import { collection, getDocs } from "firebase/firestore";
-import emailjs from '@emailjs/browser';
+import emailjs from "@emailjs/browser";
 
-emailjs.init('yQ8skMDEGxmHl4fgX');
+emailjs.init("yQ8skMDEGxmHl4fgX");
 
 const Login = () => {
   const videoRef = useRef();
@@ -26,7 +26,7 @@ const Login = () => {
 
   // ========== UTILITY FUNCTIONS ==========
   const clearScanning = () => {
-    [intervalRef, progressIntervalRef, directionIntervalRef].forEach(ref => {
+    [intervalRef, progressIntervalRef, directionIntervalRef].forEach((ref) => {
       if (ref.current) clearInterval(ref.current);
       ref.current = null;
     });
@@ -35,7 +35,7 @@ const Login = () => {
 
   const stopCamera = () => {
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
     }
     if (videoRef.current) videoRef.current.srcObject = null;
@@ -58,19 +58,19 @@ const Login = () => {
     try {
       clearScanning();
       stopCamera();
-      
+
       const code = Math.floor(100000 + Math.random() * 900000).toString();
-      
-      await emailjs.send('service_uh90vsr', 'template_ssada75', {
+
+      await emailjs.send("service_uh90vsr", "template_ssada75", {
         passcode: code,
-        time: '15 minutes',
+        time: "15 minutes",
         email: email,
-        app_name: 'BIO TRACK'
+        app_name: "BIO TRACK",
       });
 
       localStorage.setItem("tempVerificationCode", code);
       localStorage.setItem("tempVerificationEmail", email);
-      
+
       return code;
     } catch (error) {
       console.error("Email send error:", error);
@@ -86,6 +86,8 @@ const Login = () => {
       redirectPath = "/admin/dashboard";
     } else if (userData.role === "teacher") {
       redirectPath = "/teacher/dashboard";
+    } else if (userData.role === "staff") {
+      redirectPath = "/staff";
     } else {
       redirectPath = "/student/dashboard";
     }
@@ -122,7 +124,7 @@ const Login = () => {
   const verifyCode = async (userData, fullName) => {
     try {
       const code = await sendVerificationCode(userData.email, fullName);
-      
+
       const { value: enteredCode } = await Swal.fire({
         title: "Verify Your Email",
         html: `
@@ -142,13 +144,13 @@ const Login = () => {
             Swal.showValidationMessage("Enter a valid 6-digit code");
           }
           return code;
-        }
+        },
       });
 
       if (enteredCode) {
         const storedCode = localStorage.getItem("tempVerificationCode");
         const storedEmail = localStorage.getItem("tempVerificationEmail");
-        
+
         if (enteredCode === storedCode && storedEmail === userData.email) {
           localStorage.removeItem("tempVerificationCode");
           localStorage.removeItem("tempVerificationEmail");
@@ -174,9 +176,10 @@ const Login = () => {
 
   // ========== FACE SCANNING LOGIC ==========
   const changeDirection = () => {
-    directionIndexRef.current = (directionIndexRef.current + 1) % directions.length;
+    directionIndexRef.current =
+      (directionIndexRef.current + 1) % directions.length;
     setCurrentDirection(directions[directionIndexRef.current]);
-    
+
     if (directionIndexRef.current === directions.length - 1) {
       setTimeout(() => setCurrentDirection("center"), 2000);
     }
@@ -194,17 +197,20 @@ const Login = () => {
 
     // Direction prompts (liveness detection)
     directionIntervalRef.current = setInterval(changeDirection, 2000);
-    
+
     // Progress bar
     progressIntervalRef.current = setInterval(() => {
-      setProgress(prev => prev >= 100 ? 100 : prev + 10);
+      setProgress((prev) => (prev >= 100 ? 100 : prev + 10));
     }, 1000);
 
     // Face detection interval
     intervalRef.current = setInterval(async () => {
       try {
         const detection = await faceapi
-          .detectSingleFace(videoRef.current, new faceapi.TinyFaceDetectorOptions())
+          .detectSingleFace(
+            videoRef.current,
+            new faceapi.TinyFaceDetectorOptions()
+          )
           .withFaceLandmarks()
           .withFaceDescriptor();
 
@@ -212,7 +218,7 @@ const Login = () => {
           clearInterval(progressIntervalRef.current);
           clearInterval(directionIntervalRef.current);
           setProgress(100);
-          
+
           const match = matcherRef.current.findBestMatch(detection.descriptor);
           setStatus(`Recognized: ${match.label}`);
 
@@ -250,9 +256,15 @@ const Login = () => {
       try {
         setStatus("Loading face recognition models...");
         await Promise.all([
-          faceapi.nets.tinyFaceDetector.loadFromUri("/models/tiny_face_detector_model"),
-          faceapi.nets.faceLandmark68Net.loadFromUri("/models/face_landmark_68_model"),
-          faceapi.nets.faceRecognitionNet.loadFromUri("/models/face_recognition_model"),
+          faceapi.nets.tinyFaceDetector.loadFromUri(
+            "/models/tiny_face_detector_model"
+          ),
+          faceapi.nets.faceLandmark68Net.loadFromUri(
+            "/models/face_landmark_68_model"
+          ),
+          faceapi.nets.faceRecognitionNet.loadFromUri(
+            "/models/face_recognition_model"
+          ),
         ]);
 
         setStatus("Accessing camera...");
@@ -327,11 +339,16 @@ const Login = () => {
   // ========== UI HELPERS ==========
   const getDirectionInstruction = () => {
     switch (currentDirection) {
-      case "left": return "Turn head left";
-      case "right": return "Turn head right"; 
-      case "up": return "Look up";
-      case "down": return "Look down";
-      default: return "Look straight";
+      case "left":
+        return "Turn head left";
+      case "right":
+        return "Turn head right";
+      case "up":
+        return "Look up";
+      case "down":
+        return "Look down";
+      default:
+        return "Look straight";
     }
   };
 
@@ -352,7 +369,7 @@ const Login = () => {
             className="w-full h-full object-cover"
             playsInline
           />
-          
+
           {isScanning && currentDirection !== "center" && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <div className="text-white text-xl font-bold bg-black/50 px-4 py-2 rounded-lg animate-pulse">
@@ -402,16 +419,41 @@ const Login = () => {
                 >
                   {isScanning ? (
                     <>
-                      <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      <svg
+                        className="animate-spin h-5 w-5 text-white"
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                      >
+                        <circle
+                          className="opacity-25"
+                          cx="12"
+                          cy="12"
+                          r="10"
+                          stroke="currentColor"
+                          strokeWidth="4"
+                        ></circle>
+                        <path
+                          className="opacity-75"
+                          fill="currentColor"
+                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                        ></path>
                       </svg>
                       Scanning...
                     </>
                   ) : (
                     <>
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                        <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        className="h-5 w-5"
+                        viewBox="0 0 20 20"
+                        fill="currentColor"
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z"
+                          clipRule="evenodd"
+                        />
                       </svg>
                       Try Again
                     </>
@@ -434,7 +476,7 @@ const Login = () => {
               className="ml-4 inline-block px-4 py-2 bg-white/10 hover:bg-white/20 text-emerald-100 rounded-lg transition-colors duration-300"
             >
               Quick Attendance
-            </button> 
+            </button>
           </div>
         </>
       )}

@@ -23,6 +23,8 @@ import Reports from "./admin/Reports";
 import AccessCodes from "./admin/AccessCodes";
 import QuickAttendance from "./auth/quickAttendance";
 
+import Staff from "./staff/staff_page";
+
 function App() {
   return (
     <Router>
@@ -74,8 +76,16 @@ function App() {
           <Route path="user-management" element={<UserManagement />} />
           <Route path="access-codes" element={<AccessCodes />} />
           <Route path="reports" element={<Reports />} />
-          
         </Route>
+
+        <Route
+          path="/staff"
+          element={
+            <ProtectedRoute role="staff">
+              <Staff />
+            </ProtectedRoute>
+          }
+        />
       </Routes>
     </Router>
   );
