@@ -144,6 +144,16 @@ export default function TeacherLayout() {
               onClick={() => handleNavigate("classes")}
               sidebarOpen={sidebarOpen}
             />
+
+            <SidebarLink
+              icon={<CalendarCheck size={20} />}
+              text="Excused Absences"
+              active={currentPage === "excused-absences"}
+              onClick={() => handleNavigate("excused-absences")}
+              sidebarOpen={sidebarOpen}
+            />
+
+
             <SidebarLink
               icon={<User size={20} />}
               text="Reports"

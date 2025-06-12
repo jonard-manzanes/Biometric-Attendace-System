@@ -8,6 +8,7 @@ const ClassDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const [classData, setClassData] = useState(null);
+  const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -17,7 +18,33 @@ const ClassDetail = () => {
         const classRef = doc(db, "classes", id);
         const classSnap = await getDoc(classRef);
         if (classSnap.exists()) {
-          setClassData(classSnap.data());
+          const data = classSnap.data();
+          setClassData(data);
+
+          // Fetch student details
+          if (data.studentIDs && data.studentIDs.length > 0) {
+            const studentDocs = await Promise.all(
+              data.studentIDs.map(async (studentId) => {
+                const studentDoc = await getDoc(doc(db, "users", studentId));
+                if (studentDoc.exists()) {
+                  const studentData = studentDoc.data();
+                  return {
+                    id: studentId,
+                    name: `${studentData.firstName} ${studentData.lastName}`,
+                    email: studentData.email || "No email",
+                  };
+                }
+                return {
+                  id: studentId,
+                  name: "Unknown Student",
+                  email: "Unknown email",
+                };
+              })
+            );
+            setStudents(studentDocs);
+          } else {
+            setStudents([]);
+          }
         } else {
           setError("Class not found");
         }
@@ -30,6 +57,53 @@ const ClassDetail = () => {
     };
     fetchClassDetail();
   }, [id]);
+
+  // Helper to convert data to CSV and trigger download
+  const handleDownloadCSV = () => {
+    if (!classData) return;
+
+    // Prepare CSV header
+    const header = [
+      "Subject",
+      "Instructor",
+      "Schedule",
+      "Student Name",
+      "Student Email",
+    ];
+
+    // Prepare schedule string
+    const scheduleStr = (classData.schedule || [])
+      .map((s) => `${s.day}: ${s.start}–${s.end}`)
+      .join(" | ");
+
+    // Prepare instructor (if available)
+    const instructor = classData.teacherName || "Instructor";
+
+    // Prepare rows
+    const rows = students.map((student) => [
+      classData.subjectName,
+      instructor,
+      scheduleStr,
+      student.name,
+      student.email,
+    ]);
+
+    // Combine header and rows
+    const csvContent = [header, ...rows]
+      .map((e) =>
+        e.map((field) => `"${String(field).replace(/"/g, '""')}"`).join(",")
+      )
+      .join("\n");
+
+    // Download
+    const blob = new Blob([csvContent], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${classData.subjectName || "class"}-students.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   if (loading) {
     return (
@@ -54,7 +128,7 @@ const ClassDetail = () => {
     );
   }
 
-  const totalStudents = classData.students?.length || 0;
+  const totalStudents = students.length;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -74,20 +148,25 @@ const ClassDetail = () => {
 
           {classData.joinCode && (
             <p className="mb-6 text-sm text-gray-600">
-              <span className="font-medium text-gray-700">Join Code:</span> {classData.joinCode}
+              <span className="font-medium text-gray-700">Join Code:</span>{" "}
+              {classData.joinCode}
             </p>
           )}
 
           {classData.schedule?.length > 0 && (
             <div className="mb-8">
-              <h2 className="text-xl font-semibold text-gray-800 mb-3">Schedule</h2>
+              <h2 className="text-xl font-semibold text-gray-800 mb-3">
+                Schedule
+              </h2>
               <ul className="space-y-3">
                 {classData.schedule.map((s, index) => (
                   <li key={index} className="flex items-center text-gray-700">
                     <Calendar size={18} className="mr-2 text-emerald-500" />
                     <span className="mr-4 font-medium">{s.day}:</span>
                     <Clock size={18} className="mr-2 text-emerald-500" />
-                    <span>{s.start} – {s.end}</span>
+                    <span>
+                      {s.start} – {s.end}
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -95,20 +174,31 @@ const ClassDetail = () => {
           )}
 
           <div>
-            <h2 className="text-xl font-semibold text-gray-800 mb-2">Students</h2>
+            <div className="flex justify-between items-center mb-2">
+              <h2 className="text-xl font-semibold text-gray-800">Students</h2>
+              <button
+                onClick={handleDownloadCSV}
+                className="bg-emerald-500 text-white px-3 py-1 rounded hover:bg-emerald-600 text-sm"
+              >
+                Download CSV
+              </button>
+            </div>
             <p className="mb-4 text-sm text-gray-600">
-              Total Enrolled: <span className="font-bold text-gray-800">{totalStudents}</span>
+              Total Enrolled:{" "}
+              <span className="font-bold text-gray-800">{totalStudents}</span>
             </p>
 
             {totalStudents > 0 ? (
               <ul className="divide-y divide-gray-200">
-                {classData.students.map((student) => (
+                {students.map((student) => (
                   <li key={student.id} className="py-4 flex items-center">
                     <div className="w-10 h-10 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center font-semibold text-lg mr-4">
                       {student.name.charAt(0).toUpperCase()}
                     </div>
                     <div>
-                      <p className="text-gray-800 font-medium">{student.name}</p>
+                      <p className="text-gray-800 font-medium">
+                        {student.name}
+                      </p>
                       <p className="text-sm text-gray-500">{student.email}</p>
                     </div>
                   </li>

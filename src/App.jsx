@@ -13,6 +13,7 @@ import TeacherLayout from "./teacher/TeacherLayout";
 import TeacherDashboard from "./teacher/Dashboard";
 import TeacherClasses from "./teacher/Classes";
 import TeacherReports from "./teacher/Reports";
+import Excuses from "./teacher/Excuses";
 import ClassDetail from "./teacher/ClassDetail"; // new import
 
 import AdminLayout from "./admin/AdminLayout";
@@ -57,6 +58,7 @@ function App() {
           <Route path="classes" element={<TeacherClasses />} />
           {/* New detailed view route */}
           <Route path="classes/:id" element={<ClassDetail />} />
+          <Route path="excused-absences" element={<Excuses />} />
           <Route path="reports" element={<TeacherReports />} />
         </Route>
 
@@ -72,6 +74,7 @@ function App() {
           <Route path="user-management" element={<UserManagement />} />
           <Route path="access-codes" element={<AccessCodes />} />
           <Route path="reports" element={<Reports />} />
+          
         </Route>
       </Routes>
     </Router>

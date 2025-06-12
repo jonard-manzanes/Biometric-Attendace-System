@@ -9,7 +9,6 @@ import {
   where,
 } from "firebase/firestore";
 import { format, parseISO, eachDayOfInterval } from "date-fns";
-// New imports for the chart
 import { Bar } from "react-chartjs-2";
 import {
   Chart as ChartJS,
@@ -40,10 +39,11 @@ const Reports = () => {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [teacherInfo, setTeacherInfo] = useState(null);
 
-  // Fetch all classes taught by this teacher
+  // Fetch teacher info and classes taught by this teacher
   useEffect(() => {
-    const fetchTeacherClasses = async () => {
+    const fetchTeacherInfoAndClasses = async () => {
       try {
         const teacherId = localStorage.getItem("userDocId");
         if (!teacherId) {
@@ -51,6 +51,14 @@ const Reports = () => {
           return;
         }
 
+        // Fetch teacher info
+        const teacherRef = doc(db, "users", teacherId);
+        const teacherSnap = await getDoc(teacherRef);
+        if (teacherSnap.exists()) {
+          setTeacherInfo(teacherSnap.data());
+        }
+
+        // Fetch classes
         const classesCol = collection(db, "classes");
         const q = query(classesCol, where("teacherID", "==", teacherId));
         const querySnapshot = await getDocs(q);
@@ -65,12 +73,12 @@ const Reports = () => {
           setSelectedClass(classesData[0].id);
         }
       } catch (err) {
-        setError(`Error fetching classes: ${err.message}`);
-        console.error("Error fetching classes:", err);
+        setError(`Error fetching data: ${err.message}`);
+        console.error("Error fetching data:", err);
       }
     };
 
-    fetchTeacherClasses();
+    fetchTeacherInfoAndClasses();
   }, []);
 
   // Fetch attendance data when class or date range changes
@@ -89,7 +97,6 @@ const Reports = () => {
           return;
         }
         const classData = classSnap.data();
-        // Use joinCode or fallback to match Attendance.jsx path
         const attendanceClassID =
           classData.joinCode || classData.subjectName.replace(/\s/g, "_");
 
@@ -149,18 +156,36 @@ const Reports = () => {
                         ? data.timeOut.toDate()
                         : new Date(data.timeOut)
                       : null;
+                    
+                    // Get excuse information if exists
+                    let excuseInfo = null;
+                    if (data.excuse) {
+                      excuseInfo = {
+                        reason: data.excuse.reason || "No reason provided",
+                        status: data.excuse.status || "pending",
+                        image: data.excuse.image || null,
+                      };
+                    }
+
+                    let status;
+                    if (timeIn && timeOut) {
+                      status = "Present";
+                    } else if (timeIn) {
+                      status = "Time In Only";
+                    } else if (excuseInfo) {
+                      status = excuseInfo.status === "approved" ? "Excused Absence" : "Pending Excuse";
+                    } else {
+                      status = "Absent";
+                    }
+
                     return {
                       date,
                       timeIn: timeIn ? format(timeIn, "hh:mm a") : null,
                       timeOut: timeOut ? format(timeOut, "hh:mm a") : null,
                       verificationMethod:
                         data.verificationMethod || data.verifiedBy || null,
-                      status:
-                        timeIn && timeOut
-                          ? "Present"
-                          : timeIn
-                          ? "Time In Only"
-                          : "Absent",
+                      status,
+                      excuse: excuseInfo,
                     };
                   }
                 } catch (err) {
@@ -172,6 +197,7 @@ const Reports = () => {
                   timeOut: null,
                   verificationMethod: null,
                   status: "Absent",
+                  excuse: null,
                 };
               })
             );
@@ -207,6 +233,63 @@ const Reports = () => {
     });
   };
 
+  // Download attendance report as CSV
+  const downloadAttendanceReport = () => {
+    if (!selectedClass || attendanceData.length === 0) return;
+
+    // Get class info
+    const classInfo = classes.find((c) => c.id === selectedClass);
+    if (!classInfo) return;
+
+    // Get current date
+    const today = format(new Date(), "yyyy-MM-dd");
+    
+    // Filter attendance data for today
+    const todayAttendance = attendanceData.map((student) => {
+      const todayRecord = student.records.find((record) => record.date === today);
+      return {
+        studentName: student.studentName,
+        status: todayRecord ? todayRecord.status : "Absent",
+        timeIn: todayRecord ? todayRecord.timeIn || "-" : "-",
+        timeOut: todayRecord ? todayRecord.timeOut || "-" : "-",
+        excuse: todayRecord?.excuse?.reason || "-",
+      };
+    });
+
+    // Prepare CSV content
+    const csvContent = [
+      ["Attendance Report", "", "", "", ""],
+      ["Date:", today, "", "", ""],
+      ["Subject:", classInfo.subjectName, "", "", ""],
+      ["Instructor:", teacherInfo ? `${teacherInfo.firstName} ${teacherInfo.lastName}` : "", "", "", ""],
+      ["", "", "", "", ""],
+      ["Student Name", "Status", "Time In", "Time Out", "Excuse Reason"],
+      ...todayAttendance.map((student) => [
+        student.studentName,
+        student.status,
+        student.timeIn,
+        student.timeOut,
+        student.excuse,
+      ]),
+    ]
+      .map((row) => row.join(","))
+      .join("\n");
+
+    // Create download link
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute(
+      "download",
+      `attendance_${classInfo.subjectName}_${today}.csv`
+    );
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   // Aggregate attendance data for chart display
   const aggregatedData = useMemo(() => {
     if (attendanceData.length === 0) return null;
@@ -223,6 +306,18 @@ const Reports = () => {
       attendanceData.reduce((sum, student) => {
         const record = student.records.find((r) => r.date === date);
         return sum + (record && record.status === "Time In Only" ? 1 : 0);
+      }, 0)
+    );
+    const excusedCounts = dates.map((date) =>
+      attendanceData.reduce((sum, student) => {
+        const record = student.records.find((r) => r.date === date);
+        return sum + (record && record.status === "Excused Absence" ? 1 : 0);
+      }, 0)
+    );
+    const pendingExcuseCounts = dates.map((date) =>
+      attendanceData.reduce((sum, student) => {
+        const record = student.records.find((r) => r.date === date);
+        return sum + (record && record.status === "Pending Excuse" ? 1 : 0);
       }, 0)
     );
     const absentCounts = dates.map((date) =>
@@ -246,6 +341,16 @@ const Reports = () => {
           backgroundColor: "yellow",
         },
         {
+          label: "Excused Absence",
+          data: excusedCounts,
+          backgroundColor: "blue",
+        },
+        {
+          label: "Pending Excuse",
+          data: pendingExcuseCounts,
+          backgroundColor: "orange",
+        },
+        {
           label: "Absent",
           data: absentCounts,
           backgroundColor: "red",
@@ -254,8 +359,26 @@ const Reports = () => {
     };
   }, [attendanceData]);
 
+  // Function to get status color
+  const getStatusColor = (status) => {
+    switch (status) {
+      case "Present":
+        return "bg-green-100 text-green-800";
+      case "Time In Only":
+        return "bg-yellow-100 text-yellow-800";
+      case "Excused Absence":
+        return "bg-blue-100 text-blue-800";
+      case "Pending Excuse":
+        return "bg-orange-100 text-orange-800";
+      case "Absent":
+        return "bg-red-100 text-red-800";
+      default:
+        return "bg-gray-100 text-gray-800";
+    }
+  };
+
   return (
-    <div>
+    <div className="p-4">
       <h1 className="text-2xl font-bold mb-6">Attendance Reports</h1>
 
       {error && (
@@ -310,6 +433,17 @@ const Reports = () => {
             />
           </div>
         </div>
+        
+        {/* Download button */}
+        <div className="mt-4 flex justify-end">
+          <button
+            onClick={downloadAttendanceReport}
+            className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2 px-4 rounded"
+            disabled={loading || !selectedClass || attendanceData.length === 0}
+          >
+            Download Today's Attendance
+          </button>
+        </div>
       </div>
 
       {/* Attendance Table */}
@@ -356,31 +490,28 @@ const Reports = () => {
                           className="px-4 py-2"
                         >
                           <div className="flex flex-col items-center">
-                            {record.status === "Present" ? (
-                              <>
-                                <span className="text-green-600 font-medium">
-                                  Present
-                                </span>
-                                <span className="text-xs text-gray-500">
-                                  In: {record.timeIn || "—"}
-                                </span>
-                                <span className="text-xs text-gray-500">
-                                  Out: {record.timeOut || "—"}
-                                </span>
-                              </>
-                            ) : record.status === "Time In Only" ? (
-                              <>
-                                <span className="text-yellow-600 font-medium">
-                                  Time In Only
-                                </span>
-                                <span className="text-xs text-gray-500">
-                                  In: {record.timeIn || "—"}
-                                </span>
-                              </>
-                            ) : (
-                              <span className="text-red-600 font-medium">
-                                Absent
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(record.status)}`}>
+                              {record.status}
+                            </span>
+                            
+                            {record.timeIn && (
+                              <span className="text-xs text-gray-500">
+                                In: {record.timeIn}
                               </span>
+                            )}
+                            {record.timeOut && (
+                              <span className="text-xs text-gray-500">
+                                Out: {record.timeOut}
+                              </span>
+                            )}
+                            {record.excuse && (
+                              <div className="mt-1 text-xs text-gray-600">
+                                <div className="font-medium">Excuse:</div>
+                                <div>{record.excuse.reason}</div>
+                                {record.excuse.status === "pending" && (
+                                  <div className="text-orange-500">(Pending)</div>
+                                )}
+                              </div>
                             )}
                             {record.verificationMethod && (
                               <span className="text-xs text-gray-400 mt-1">
