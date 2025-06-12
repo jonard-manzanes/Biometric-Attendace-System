@@ -12,6 +12,10 @@ import {
   doc,
   serverTimestamp,
 } from "firebase/firestore";
+import emailjs from '@emailjs/browser';
+
+// Initialize EmailJS with your Public Key
+emailjs.init('yQ8skMDEGxmHl4fgX');
 
 const SignUp = () => {
   const videoRef = useRef();
@@ -20,27 +24,22 @@ const SignUp = () => {
   const [lastName, setLastName] = useState("");
   const [studentId, setStudentId] = useState("");
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
   const [status, setStatus] = useState("Initializing camera...");
   const [isLoading, setIsLoading] = useState(false);
+  const [isScanning, setIsScanning] = useState(false);
+  const [currentDirection, setCurrentDirection] = useState("center");
+  const directions = ["left", "right", "up", "down", "center"];
+  const directionIndexRef = useRef(0);
   const role = "student";
-  const [passwordError, setPasswordError] = useState("");
 
   useEffect(() => {
     const initModelsAndVideo = async () => {
       try {
         setStatus("Loading face recognition models...");
         await Promise.all([
-          faceapi.nets.tinyFaceDetector.loadFromUri(
-            "/models/tiny_face_detector_model"
-          ),
-          faceapi.nets.faceLandmark68Net.loadFromUri(
-            "/models/face_landmark_68_model"
-          ),
-          faceapi.nets.faceRecognitionNet.loadFromUri(
-            "/models/face_recognition_model"
-          ),
+          faceapi.nets.tinyFaceDetector.loadFromUri("/models/tiny_face_detector_model"),
+          faceapi.nets.faceLandmark68Net.loadFromUri("/models/face_landmark_68_model"),
+          faceapi.nets.faceRecognitionNet.loadFromUri("/models/face_recognition_model"),
         ]);
 
         setStatus("Accessing camera...");
@@ -70,24 +69,58 @@ const SignUp = () => {
     };
   }, []);
 
-  const validatePassword = (password) => {
-    const errors = [];
-    if (password.length < 8) {
-      errors.push("at least 8 characters");
+  const changeDirection = () => {
+    directionIndexRef.current = (directionIndexRef.current + 1) % directions.length;
+    setCurrentDirection(directions[directionIndexRef.current]);
+    
+    if (directionIndexRef.current === directions.length - 1) {
+      setTimeout(() => {
+        setCurrentDirection("center");
+      }, 2000);
     }
-    if (!/[A-Z]/.test(password)) {
-      errors.push("one uppercase letter");
+  };
+
+  const startFaceScan = () => {
+    setIsScanning(true);
+    setStatus("Please follow the head movement instructions");
+    const interval = setInterval(changeDirection, 2000);
+    
+    return () => {
+      clearInterval(interval);
+      setIsScanning(false);
+      setCurrentDirection("center");
+    };
+  };
+
+  const sendSuccessEmail = async (email, firstName) => {
+    try {
+      const response = await emailjs.send(
+        'service_uh90vsr', // Your EmailJS Service ID
+        'template_zfw25qd', // Your EmailJS Template ID
+        {
+          name: firstName,
+          email: email,
+          studentId: studentId,
+          date: new Date().toLocaleDateString()
+        }
+      );
+      
+      console.log('Email sent successfully:', {
+        status: response.status,
+        text: response.text,
+        email: email
+      });
+      
+      return true;
+    } catch (error) {
+      console.error('Failed to send email:', {
+        code: error.code,
+        message: error.message,
+        text: error.text,
+        response: error.response
+      });
+      return false;
     }
-    if (!/[a-z]/.test(password)) {
-      errors.push("one lowercase letter");
-    }
-    if (!/[0-9]/.test(password)) {
-      errors.push("one number");
-    }
-    if (!/[!@#$%^&*(),.?":{}|<>]/.test(password)) {
-      errors.push("one special character");
-    }
-    return errors;
   };
 
   const captureSnapshot = () => {
@@ -117,10 +150,7 @@ const SignUp = () => {
 
     for (const doc of querySnapshot.docs) {
       const existingDescriptor = doc.data().descriptor;
-      const distance = faceapi.euclideanDistance(
-        descriptor,
-        existingDescriptor
-      );
+      const distance = faceapi.euclideanDistance(descriptor, existingDescriptor);
       if (distance < 0.3) {
         return true;
       }
@@ -131,36 +161,6 @@ const SignUp = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsLoading(true);
-
-    const passwordErrors = validatePassword(password);
-    if (passwordErrors.length > 0) {
-      Swal.fire({
-        icon: "error",
-        title: "Password Requirements Not Met",
-        html: `
-          <div class="text-left">
-            <p class="mb-2">Your password must contain:</p>
-            <ul class="list-disc list-inside">
-              ${passwordErrors.map(err => `<li>${err}</li>`).join('')}
-            </ul>
-          </div>
-        `,
-        confirmButtonColor: "#10b981",
-      });
-      setIsLoading(false);
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      Swal.fire({
-        icon: "error",
-        title: "Password Mismatch",
-        text: "The passwords you entered do not match.",
-        confirmButtonColor: "#10b981",
-      });
-      setIsLoading(false);
-      return;
-    }
 
     if (!firstName.trim() || !lastName.trim() || !studentId.trim() || !email.trim()) {
       Swal.fire({
@@ -173,12 +173,27 @@ const SignUp = () => {
       return;
     }
 
-    setStatus("Detecting face...");
+    // Test email sending before face registration (for debugging)
     try {
+      const emailTest = await sendSuccessEmail(email, firstName);
+      if (!emailTest) {
+        throw new Error("Email service test failed");
+      }
+    } catch (error) {
+      console.error("Email test failed:", error);
+    }
+
+    try {
+      // First complete face registration
+      const stopScanning = startFaceScan();
+      setStatus("Detecting face...");
+      
       const detection = await faceapi
         .detectSingleFace(videoRef.current, new faceapi.TinyFaceDetectorOptions())
         .withFaceLandmarks()
         .withFaceDescriptor();
+
+      stopScanning();
 
       if (!detection) {
         throw new Error("No face detected. Please ensure your face is visible and well-lit.");
@@ -203,15 +218,7 @@ const SignUp = () => {
           descriptor,
           image: snapshot,
           email,
-          password,
           updatedAt: serverTimestamp(),
-        });
-
-        await Swal.fire({
-          icon: "success",
-          title: "Registration Complete",
-          text: "Your face has been successfully registered to your account.",
-          confirmButtonColor: "#10b981",
         });
       } else {
         await addDoc(collection(db, "users"), {
@@ -219,35 +226,50 @@ const SignUp = () => {
           lastName,
           studentId,
           email,
-          password,
           role,
           descriptor,
           image: snapshot,
           fullName: `${firstName} ${lastName}`,
           createdAt: serverTimestamp(),
         });
-
-        await Swal.fire({
-          icon: "success",
-          title: "Registration Successful",
-          text: "You have been successfully registered as a student.",
-          confirmButtonColor: "#10b981",
-        });
       }
 
-      setStatus("Registration successful!");
+      // Send confirmation email after successful registration
+      const emailSent = await sendSuccessEmail(email, firstName);
+      
+      await Swal.fire({
+        icon: "success",
+        title: "Registration Complete",
+        html: `
+          <div>
+            <p>Registration successful!</p>
+            ${emailSent ? 
+              '<p class="text-green-500">Confirmation email sent to ' + email + '</p>' : 
+              '<p class="text-yellow-500">Registration complete but email could not be sent</p>'
+            }
+            <p class="text-sm mt-2">Student ID: ${studentId}</p>
+          </div>
+        `,
+        confirmButtonColor: "#10b981",
+      });
+
+      // Reset form
       setFirstName("");
       setLastName("");
       setStudentId("");
       setEmail("");
-      setPassword("");
-      setConfirmPassword("");
+      setStatus("Registration successful!");
     } catch (error) {
-      console.error(error);
+      console.error('Registration Error:', error);
       Swal.fire({
         icon: "error",
         title: "Registration Failed",
-        text: error.message,
+        html: `
+          <div>
+            <p>${error.message}</p>
+            <p class="text-sm mt-2">Please try again or contact support</p>
+          </div>
+        `,
         confirmButtonColor: "#10b981",
       });
       setStatus(error.message);
@@ -315,11 +337,21 @@ const SignUp = () => {
     });
   };
 
+  const getDirectionInstruction = () => {
+    switch (currentDirection) {
+      case "left": return "Please turn your head slowly to the left";
+      case "right": return "Please turn your head slowly to the right";
+      case "up": return "Please look up slowly";
+      case "down": return "Please look down slowly";
+      default: return "Please look straight at the camera";
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-900 to-emerald-700 flex items-center justify-center p-4 sm:p-6">
       <div className="w-full max-w-6xl bg-white/5 backdrop-blur-md rounded-2xl shadow-xl overflow-hidden">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-0">
-          {/* Left side - Camera Preview */}
+          {/* Camera Preview */}
           <div className="bg-emerald-900/30 p-6 flex flex-col items-center justify-center">
             <div className="relative w-full max-w-xs aspect-square mb-6">
               <video
@@ -328,26 +360,28 @@ const SignUp = () => {
                 muted
                 className="w-full h-full rounded-xl object-cover border-4 border-emerald-400 shadow-lg"
               />
-              <canvas
-                ref={canvasRef}
-                className="hidden"
-              />
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <div className="absolute inset-0 border-4 border-transparent border-dashed rounded-xl animate-pulse"></div>
-              </div>
+              <canvas ref={canvasRef} className="hidden" />
+              
+              {isScanning && currentDirection !== "center" && (
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                  <div className="text-white text-xl font-bold bg-black/50 px-4 py-2 rounded-lg animate-pulse">
+                    {currentDirection.toUpperCase()}
+                  </div>
+                </div>
+              )}
             </div>
             
             <div className="text-center w-full">
               <p className="text-emerald-100 font-medium bg-emerald-800/50 rounded-lg py-2 px-4">
-                {status}
+                {isScanning ? getDirectionInstruction() : status}
               </p>
               <p className="text-emerald-200 text-sm mt-3">
-                Position your face in the center of the frame
+                {isScanning ? "Follow the instructions for better face capture" : "Position your face in the center of the frame"}
               </p>
             </div>
           </div>
 
-          {/* Right side - Registration Form */}
+          {/* Registration Form */}
           <div className="bg-white/5 p-6 sm:p-8">
             <h1 className="text-2xl sm:text-3xl font-bold text-white text-center mb-6">
               Student Registration
@@ -399,37 +433,12 @@ const SignUp = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-emerald-100 mb-1">Password*</label>
-                  <input
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full px-4 py-2 bg-white/10 border border-emerald-400/50 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-emerald-100 mb-1">Confirm Password*</label>
-                  <input
-                    type="password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="w-full px-4 py-2 bg-white/10 border border-emerald-400/50 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                    required
-                  />
-                </div>
-              </div>
-
               <div className="bg-emerald-900/30 p-3 rounded-lg">
-                <p className="text-emerald-100 text-sm font-medium">Password Requirements:</p>
+                <p className="text-emerald-100 text-sm font-medium">Registration Process:</p>
                 <ul className="text-emerald-200 text-xs list-disc list-inside mt-1">
-                  <li>Minimum 8 characters</li>
-                  <li>At least 1 uppercase letter</li>
-                  <li>At least 1 lowercase letter</li>
-                  <li>At least 1 number</li>
-                  <li>At least 1 special character</li>
+                  <li>Enter your information</li>
+                  <li>Complete face registration</li>
+                  <li>Receive confirmation email</li>
                 </ul>
               </div>
 
@@ -437,9 +446,7 @@ const SignUp = () => {
                 type="submit"
                 disabled={isLoading}
                 className={`w-full py-3 px-4 rounded-lg font-semibold transition-colors ${
-                  isLoading
-                    ? "bg-emerald-700 cursor-not-allowed"
-                    : "bg-emerald-600 hover:bg-emerald-500"
+                  isLoading ? "bg-emerald-700 cursor-not-allowed" : "bg-emerald-600 hover:bg-emerald-500"
                 } text-white flex items-center justify-center`}
               >
                 {isLoading ? (
