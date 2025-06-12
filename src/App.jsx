@@ -13,6 +13,7 @@ import TeacherLayout from "./teacher/TeacherLayout";
 import TeacherDashboard from "./teacher/Dashboard";
 import TeacherClasses from "./teacher/Classes";
 import TeacherReports from "./teacher/Reports";
+import ClassDetail from "./teacher/ClassDetail"; // new import
 
 import AdminLayout from "./admin/AdminLayout";
 import AdminDashboard from "./admin/Dashboard";
@@ -20,7 +21,6 @@ import UserManagement from "./admin/UserManagement";
 import Reports from "./admin/Reports";
 import AccessCodes from "./admin/AccessCodes";
 import QuickAttendance from "./auth/quickAttendance";
-
 
 function App() {
   return (
@@ -55,6 +55,8 @@ function App() {
         >
           <Route path="dashboard" element={<TeacherDashboard />} />
           <Route path="classes" element={<TeacherClasses />} />
+          {/* New detailed view route */}
+          <Route path="classes/:id" element={<ClassDetail />} />
           <Route path="reports" element={<TeacherReports />} />
         </Route>
 
@@ -70,7 +72,6 @@ function App() {
           <Route path="user-management" element={<UserManagement />} />
           <Route path="access-codes" element={<AccessCodes />} />
           <Route path="reports" element={<Reports />} />
-
         </Route>
       </Routes>
     </Router>

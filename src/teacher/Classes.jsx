@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom"; // added import
 import { db } from "../firebaseConfig";
 import {
   collection,
@@ -257,6 +258,7 @@ const ClassModal = ({
 };
 
 const Classes = ({ currentUser }) => {
+  const navigate = useNavigate(); // initialize navigate
   const [showModal, setShowModal] = useState(false);
   const [editModalData, setEditModalData] = useState(null);
   const [classes, setClasses] = useState([]);
@@ -333,7 +335,7 @@ const Classes = ({ currentUser }) => {
         subjectName,
         schedule: schedules,
       });
-      
+
       Swal.fire({
         icon: "success",
         title: "Class updated!",
@@ -456,7 +458,7 @@ const Classes = ({ currentUser }) => {
         icon: "success",
         title: "Class deleted!",
         text: "The class has been deleted successfully.",
-        confirmButtonColor: "#10b981",  
+        confirmButtonColor: "#10b981",
       });
     } catch (err) {
       console.error("Error deleting class:", err);
@@ -556,7 +558,8 @@ const Classes = ({ currentUser }) => {
           {classes.map((subject) => (
             <div
               key={subject.id}
-              className="bg-white rounded-lg shadow-md overflow-hidden transition-all duration-200 transform hover:-translate-y-1 hover:shadow-lg"
+              className="bg-white rounded-lg shadow-md overflow-hidden transition-all duration-200 transform hover:-translate-y-1 hover:shadow-lg cursor-pointer"
+              onClick={() => navigate(`/teacher/classes/${subject.id}`)} // navigate on card click
             >
               <div className="h-2 bg-emerald-500"></div>
               <div className="p-5">
@@ -571,7 +574,10 @@ const Classes = ({ currentUser }) => {
                       </div>
                     )}
                     <button
-                      onClick={() => handleEdit(subject)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleEdit(subject);
+                      }}
                       className="text-gray-600 hover:text-emerald-600 p-1"
                       title="Edit class"
                     >
@@ -638,7 +644,10 @@ const Classes = ({ currentUser }) => {
 
                 <div className="mt-4 flex justify-between">
                   <button
-                    onClick={() => toggleExpandClass(subject.id)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleExpandClass(subject.id);
+                    }}
                     className="text-sm text-emerald-600 hover:text-emerald-800 font-medium hover:underline"
                   >
                     {expandedClass === subject.id
@@ -646,7 +655,10 @@ const Classes = ({ currentUser }) => {
                       : "View Students"}
                   </button>
                   <button
-                    onClick={() => handleDelete(subject.id)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDelete(subject.id);
+                    }}
                     className="text-sm text-red-500 hover:text-red-700 font-medium hover:underline"
                   >
                     Delete Class
