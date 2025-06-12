@@ -7,8 +7,10 @@ import {
   getDocs,
   query,
   where,
+  addDoc,
+  deleteDoc,
 } from "firebase/firestore";
-import { format, parseISO, eachDayOfInterval } from "date-fns";
+import { format, parseISO, eachDayOfInterval, isMatch, parse } from "date-fns";
 import { Bar } from "react-chartjs-2";
 import {
   Chart as ChartJS,
@@ -32,6 +34,7 @@ ChartJS.register(
 const Reports = () => {
   const [classes, setClasses] = useState([]);
   const [selectedClass, setSelectedClass] = useState(null);
+  const [classSchedule, setClassSchedule] = useState([]);
   const [attendanceData, setAttendanceData] = useState([]);
   const [dateRange, setDateRange] = useState({
     start: format(new Date(), "yyyy-MM-dd"),
@@ -40,8 +43,14 @@ const Reports = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [teacherInfo, setTeacherInfo] = useState(null);
+  const [holidays, setHolidays] = useState([]);
+  const [newHoliday, setNewHoliday] = useState({
+    date: format(new Date(), "yyyy-MM-dd"),
+    description: "",
+  });
+  const [showHolidayForm, setShowHolidayForm] = useState(false);
 
-  // Fetch teacher info and classes taught by this teacher
+  // Fetch teacher info, classes, and holidays
   useEffect(() => {
     const fetchTeacherInfoAndClasses = async () => {
       try {
@@ -71,7 +80,21 @@ const Reports = () => {
         setClasses(classesData);
         if (classesData.length > 0) {
           setSelectedClass(classesData[0].id);
+          setClassSchedule(classesData[0].schedule || []);
         }
+
+        // Fetch holidays
+        const holidaysCol = collection(db, "holidays");
+        const holidaysQuery = query(
+          holidaysCol,
+          where("teacherId", "==", teacherId)
+        );
+        const holidaysSnapshot = await getDocs(holidaysQuery);
+        const holidaysData = holidaysSnapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
+        setHolidays(holidaysData);
       } catch (err) {
         setError(`Error fetching data: ${err.message}`);
         console.error("Error fetching data:", err);
@@ -80,6 +103,58 @@ const Reports = () => {
 
     fetchTeacherInfoAndClasses();
   }, []);
+
+  // When selected class changes, update the schedule
+  useEffect(() => {
+    if (selectedClass) {
+      const selected = classes.find((c) => c.id === selectedClass);
+      if (selected) {
+        setClassSchedule(selected.schedule || []);
+      }
+    }
+  }, [selectedClass, classes]);
+
+  // Filter dates based on class schedule days and exclude holidays
+  const filterDatesBySchedule = (dates) => {
+    if (!classSchedule || classSchedule.length === 0) return dates;
+
+    // Only include schedule entries with a valid 'day'
+    const scheduleDays = classSchedule
+      .filter((s) => s && typeof s.day === "string")
+      .map((s) => s.day.toLowerCase());
+
+    // Get holiday dates
+    const holidayDates = holidays.map((h) => h.date);
+
+    return dates.filter((date) => {
+      // Skip if it's a holiday
+      if (holidayDates.includes(date)) return false;
+
+      const parsedDate = parseISO(date);
+      const dayName = format(parsedDate, "EEEE").toLowerCase();
+      return scheduleDays.includes(dayName);
+    });
+  };
+
+  // Check if a time falls within any of the class schedule times
+  const isDuringClassTime = (timeStr, date) => {
+    if (!timeStr || !classSchedule || classSchedule.length === 0) return false;
+
+    const time = parse(timeStr, "HH:mm", new Date(date));
+    if (isNaN(time)) return false;
+
+    return classSchedule.some((session) => {
+      const dayMatches =
+        format(parseISO(date), "EEEE").toLowerCase() ===
+        session.day.toLowerCase();
+      if (!dayMatches) return false;
+
+      const startTime = parse(session.start, "HH:mm", new Date(date));
+      const endTime = parse(session.end, "HH:mm", new Date(date));
+
+      return time >= startTime && time <= endTime;
+    });
+  };
 
   // Fetch attendance data when class or date range changes
   useEffect(() => {
@@ -109,10 +184,13 @@ const Reports = () => {
         // Generate date array from the selected dateRange
         const startDate = parseISO(dateRange.start);
         const endDate = parseISO(dateRange.end);
-        const dateArray = eachDayOfInterval({
+        const allDates = eachDayOfInterval({
           start: startDate,
           end: endDate,
         }).map((date) => format(date, "yyyy-MM-dd"));
+
+        // Filter dates based on class schedule and exclude holidays
+        const dateArray = filterDatesBySchedule(allDates);
 
         // Fetch attendance for each student and each date
         const attendancePromises = studentIDs.map(async (studentId) => {
@@ -156,7 +234,7 @@ const Reports = () => {
                         ? data.timeOut.toDate()
                         : new Date(data.timeOut)
                       : null;
-                    
+
                     // Get excuse information if exists
                     let excuseInfo = null;
                     if (data.excuse) {
@@ -167,13 +245,29 @@ const Reports = () => {
                       };
                     }
 
+                    // Check if timeIn/timeOut are during scheduled class time
+                    const timeInStr = timeIn ? format(timeIn, "HH:mm") : null;
+                    const timeOutStr = timeOut
+                      ? format(timeOut, "HH:mm")
+                      : null;
+
+                    const validTimeIn = timeInStr
+                      ? isDuringClassTime(timeInStr, date)
+                      : false;
+                    const validTimeOut = timeOutStr
+                      ? isDuringClassTime(timeOutStr, date)
+                      : false;
+
                     let status;
-                    if (timeIn && timeOut) {
+                    if (validTimeIn && validTimeOut) {
                       status = "Present";
-                    } else if (timeIn) {
+                    } else if (validTimeIn) {
                       status = "Time In Only";
                     } else if (excuseInfo) {
-                      status = excuseInfo.status === "approved" ? "Excused Absence" : "Pending Excuse";
+                      status =
+                        excuseInfo.status === "approved"
+                          ? "Excused Absence"
+                          : "Pending Excuse";
                     } else {
                       status = "Absent";
                     }
@@ -186,6 +280,8 @@ const Reports = () => {
                         data.verificationMethod || data.verifiedBy || null,
                       status,
                       excuse: excuseInfo,
+                      isValidTimeIn: validTimeIn,
+                      isValidTimeOut: validTimeOut,
                     };
                   }
                 } catch (err) {
@@ -198,6 +294,8 @@ const Reports = () => {
                   verificationMethod: null,
                   status: "Absent",
                   excuse: null,
+                  isValidTimeIn: false,
+                  isValidTimeOut: false,
                 };
               })
             );
@@ -224,13 +322,55 @@ const Reports = () => {
     };
 
     fetchAttendanceData();
-  }, [selectedClass, dateRange]);
+  }, [selectedClass, dateRange, classSchedule, holidays]);
 
   const handleDateChange = (e) => {
     setDateRange({
       ...dateRange,
       [e.target.name]: e.target.value,
     });
+  };
+
+  // Add new holiday
+  const addHoliday = async () => {
+    try {
+      const teacherId = localStorage.getItem("userDocId");
+      if (!teacherId) {
+        setError("Teacher ID not found in localStorage");
+        return;
+      }
+
+      const holidayToAdd = {
+        date: newHoliday.date,
+        description: newHoliday.description,
+        teacherId: teacherId,
+      };
+
+      const docRef = await addDoc(collection(db, "holidays"), holidayToAdd);
+      setHolidays([
+        ...holidays,
+        { id: docRef.id, ...holidayToAdd },
+      ]);
+      setNewHoliday({
+        date: format(new Date(), "yyyy-MM-dd"),
+        description: "",
+      });
+      setShowHolidayForm(false);
+    } catch (err) {
+      setError(`Error adding holiday: ${err.message}`);
+      console.error("Error adding holiday:", err);
+    }
+  };
+
+  // Delete holiday
+  const deleteHoliday = async (holidayId) => {
+    try {
+      await deleteDoc(doc(db, "holidays", holidayId));
+      setHolidays(holidays.filter((h) => h.id !== holidayId));
+    } catch (err) {
+      setError(`Error deleting holiday: ${err.message}`);
+      console.error("Error deleting holiday:", err);
+    }
   };
 
   // Download attendance report as CSV
@@ -243,10 +383,12 @@ const Reports = () => {
 
     // Get current date
     const today = format(new Date(), "yyyy-MM-dd");
-    
+
     // Filter attendance data for today
     const todayAttendance = attendanceData.map((student) => {
-      const todayRecord = student.records.find((record) => record.date === today);
+      const todayRecord = student.records.find(
+        (record) => record.date === today
+      );
       return {
         studentName: student.studentName,
         status: todayRecord ? todayRecord.status : "Absent",
@@ -261,7 +403,21 @@ const Reports = () => {
       ["Attendance Report", "", "", "", ""],
       ["Date:", today, "", "", ""],
       ["Subject:", classInfo.subjectName, "", "", ""],
-      ["Instructor:", teacherInfo ? `${teacherInfo.firstName} ${teacherInfo.lastName}` : "", "", "", ""],
+      [
+        "Instructor:",
+        teacherInfo ? `${teacherInfo.firstName} ${teacherInfo.lastName}` : "",
+        "",
+        "",
+        "",
+      ],
+      [
+        "Class Schedule:",
+        classSchedule.map((s) => `${s.day} ${s.start}-${s.end}`).join(", "),
+        "",
+        "",
+        "",
+      ],
+      ["Holidays:", holidays.map(h => `${h.date}: ${h.description}`).join("; "), "", "", ""],
       ["", "", "", "", ""],
       ["Student Name", "Status", "Time In", "Time Out", "Excuse Reason"],
       ...todayAttendance.map((student) => [
@@ -328,7 +484,7 @@ const Reports = () => {
     );
 
     return {
-      labels: dates.map((date) => format(parseISO(date), "MMM d")),
+      labels: dates.map((date) => format(parseISO(date), "MMM d (EEEE)")),
       datasets: [
         {
           label: "Present",
@@ -378,9 +534,8 @@ const Reports = () => {
   };
 
   return (
-    <div className="p-4">
-      <h1 className="text-2xl font-bold mb-6">Attendance Reports</h1>
-
+    <div >
+      <h1 className="text-2xl font-bold mb-2">Attendance Reports</h1>
       {error && (
         <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-4">
           <p>{error}</p>
@@ -433,7 +588,96 @@ const Reports = () => {
             />
           </div>
         </div>
-        
+
+        {/* Class schedule display */}
+        {classSchedule && classSchedule.length > 0 && (
+          <div className="mt-4">
+            <p className="text-sm font-medium text-gray-700">Class Schedule:</p>
+            <div className="flex flex-wrap gap-2 mt-1">
+              {classSchedule.map((session, index) => (
+                <span
+                  key={index}
+                  className="bg-gray-100 px-2 py-1 rounded text-sm"
+                >
+                  {session.day} {session.start}-{session.end}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Holidays management */}
+        <div className="mt-4">
+          <div className="flex justify-between items-center">
+            <p className="text-sm font-medium text-gray-700">Holidays/No Class Days:</p>
+            <button
+              onClick={() => setShowHolidayForm(!showHolidayForm)}
+              className="text-emerald-600 hover:text-emerald-800 text-sm font-medium"
+            >
+              {showHolidayForm ? "Cancel" : "+ Add Holiday"}
+            </button>
+          </div>
+          
+          {showHolidayForm && (
+            <div className="mt-2 p-3 bg-gray-50 rounded-lg">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Date
+                  </label>
+                  <input
+                    type="date"
+                    value={newHoliday.date}
+                    onChange={(e) => setNewHoliday({...newHoliday, date: e.target.value})}
+                    className="w-full p-2 border border-gray-300 rounded text-sm"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Description
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={newHoliday.description}
+                      onChange={(e) => setNewHoliday({...newHoliday, description: e.target.value})}
+                      className="flex-1 p-2 border border-gray-300 rounded text-sm"
+                      placeholder="E.g., Thanksgiving Break"
+                    />
+                    <button
+                      onClick={addHoliday}
+                      className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2 px-4 rounded text-sm"
+                    >
+                      Add
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {holidays.length > 0 && (
+            <div className="mt-2">
+              {holidays.map((holiday) => (
+                <div key={holiday.id} className="flex justify-between items-center bg-gray-100 p-2 rounded mb-1">
+                  <div>
+                    <span className="font-medium text-sm">{holiday.date}</span>
+                    {holiday.description && (
+                      <span className="text-sm ml-2">- {holiday.description}</span>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => deleteHoliday(holiday.id)}
+                    className="text-red-500 hover:text-red-700 text-sm"
+                  >
+                    Delete
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         {/* Download button */}
         <div className="mt-4 flex justify-end">
           <button
@@ -467,7 +711,7 @@ const Reports = () => {
                           key={record.date}
                           className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
                         >
-                          {format(parseISO(record.date), "MMM d")}
+                          {format(parseISO(record.date), "MMM d (EEEE)")}
                         </th>
                       ))}
                   </tr>
@@ -490,17 +734,33 @@ const Reports = () => {
                           className="px-4 py-2"
                         >
                           <div className="flex flex-col items-center">
-                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(record.status)}`}>
+                            <span
+                              className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(
+                                record.status
+                              )}`}
+                            >
                               {record.status}
                             </span>
-                            
+
                             {record.timeIn && (
-                              <span className="text-xs text-gray-500">
+                              <span
+                                className={`text-xs ${
+                                  record.isValidTimeIn
+                                    ? "text-gray-500"
+                                    : "text-red-500"
+                                }`}
+                              >
                                 In: {record.timeIn}
                               </span>
                             )}
                             {record.timeOut && (
-                              <span className="text-xs text-gray-500">
+                              <span
+                                className={`text-xs ${
+                                  record.isValidTimeOut
+                                    ? "text-gray-500"
+                                    : "text-red-500"
+                                }`}
+                              >
                                 Out: {record.timeOut}
                               </span>
                             )}
@@ -509,7 +769,9 @@ const Reports = () => {
                                 <div className="font-medium">Excuse:</div>
                                 <div>{record.excuse.reason}</div>
                                 {record.excuse.status === "pending" && (
-                                  <div className="text-orange-500">(Pending)</div>
+                                  <div className="text-orange-500">
+                                    (Pending)
+                                  </div>
                                 )}
                               </div>
                             )}
