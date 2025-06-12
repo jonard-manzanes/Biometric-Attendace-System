@@ -241,7 +241,10 @@ const Attendance = () => {
           Swal.fire({
             icon: "error",
             title: "Too Late",
-            text: `You can only time out within 20 minutes after your class has finished (until ${addMinutesToTime(todaysSchedule.end, 20)}). You will be marked as absent.`,
+            text: `You can only time out within 20 minutes after your class has finished (until ${addMinutesToTime(
+              todaysSchedule.end,
+              20
+            )}). You will be marked as absent.`,
           });
           return;
         }
@@ -299,25 +302,27 @@ const Attendance = () => {
   const addMinutesToTime = (timeStr, minutesToAdd) => {
     const [time, period] = timeStr.split(" ");
     let [hours, minutes] = time.split(":").map(Number);
-    
+
     // Convert to 24-hour format for easier calculation
     if (period === "PM" && hours !== 12) {
       hours += 12;
     } else if (period === "AM" && hours === 12) {
       hours = 0;
     }
-    
+
     // Add minutes
     let totalMinutes = hours * 60 + minutes + minutesToAdd;
-    
+
     // Convert back to 12-hour format
     let newHours = Math.floor(totalMinutes / 60) % 24;
     const newMinutes = totalMinutes % 60;
-    
+
     const newPeriod = newHours >= 12 ? "PM" : "AM";
     newHours = newHours % 12 || 12;
-    
-    return `${newHours}:${newMinutes < 10 ? '0' + newMinutes : newMinutes} ${newPeriod}`;
+
+    return `${newHours}:${
+      newMinutes < 10 ? "0" + newMinutes : newMinutes
+    } ${newPeriod}`;
   };
 
   const fetchSubjectsAndAttendance = async () => {
@@ -358,12 +363,16 @@ const Attendance = () => {
         const attendanceSnap = await getDoc(attendanceRef);
 
         let status = "none";
+        let excuseSubmitted = false;
         if (attendanceSnap.exists()) {
           const data = attendanceSnap.data();
           if (data.timeIn && data.timeOut) {
             status = "completed";
           } else if (data.timeIn) {
             status = "timeIn";
+          }
+          if (data.excuse) {
+            excuseSubmitted = true;
           }
         }
 
@@ -372,6 +381,7 @@ const Attendance = () => {
           teacherName,
           schedule: scheduleWith12HourFormat,
           attendanceStatus: status,
+          excuseSubmitted, // new field for excuse submission
         };
       });
 
@@ -382,6 +392,121 @@ const Attendance = () => {
     }
   };
 
+  // New function to submit an excuse
+  const submitExcuse = async (subject) => {
+    const now = new Date();
+    const currentDay = now.toLocaleString("en-US", { weekday: "long" });
+    const todaysSchedule = subject.schedule?.find((s) => s.day === currentDay);
+
+    if (!todaysSchedule) {
+      Swal.fire({
+        icon: "error",
+        title: "No Class Today",
+        text: "You can only submit an excuse for classes scheduled today.",
+      });
+      return;
+    }
+
+    // Check if the class has already ended
+    const currentTime24 = `${now.getHours()}:${
+      now.getMinutes() < 10 ? "0" + now.getMinutes() : now.getMinutes()
+    }`;
+    const currentTime12 = convertTo12HourFormat(currentTime24);
+    const currentMinutes = timeToMinutes(currentTime12);
+    const classEndMinutes = timeToMinutes(todaysSchedule.end);
+
+    if (currentMinutes > classEndMinutes) {
+      Swal.fire({
+        icon: "error",
+        title: "Class Completed",
+        text: "You cannot submit an excuse as the class has already ended.",
+      });
+      return;
+    }
+
+    const { value: formValues } = await Swal.fire({
+      title: "Submit Excuse",
+      html:
+        '<textarea id="excuseReason" class="swal2-input" placeholder="Type your excuse here..."></textarea>' +
+        '<input id="proofImage" type="file" accept="image/*" class="swal2-file" />',
+      focusConfirm: false,
+      showCancelButton: true,
+      preConfirm: () => {
+        const reason = document.getElementById("excuseReason").value;
+        const fileInput = document.getElementById("proofImage");
+        const file = fileInput.files[0];
+        if (!reason) {
+          Swal.showValidationMessage("Please enter a reason for your excuse");
+        }
+        if (!file) {
+          Swal.showValidationMessage("Please upload an image as proof");
+        }
+        return { reason, file };
+      },
+    });
+
+    if (!formValues) return;
+
+    // Function to upload image to Cloudinary
+    const uploadImageToCloudinary = async (file) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      // Replace 'your_upload_preset' and 'your_cloud_name' with your Cloudinary details
+      formData.append("upload_preset", "attendance_excuses");
+
+      const response = await fetch(
+        "https://api.cloudinary.com/v1_1/dzufxspg4/image/upload",
+        {
+          method: "POST",
+          body: formData,
+        }
+      );
+      const data = await response.json();
+      return data.secure_url;
+    };
+
+    try {
+      const imageUrl = await uploadImageToCloudinary(formValues.file);
+      const studentID = localStorage.getItem("userDocId");
+      const today = now.toISOString().split("T")[0];
+      const classID =
+        subject.joinCode || subject.subjectName.replace(/\s/g, "_");
+      const attendanceRef = doc(db, "attendance", classID, today, studentID);
+      const attendanceSnap = await getDoc(attendanceRef);
+
+      const excuseData = {
+        reason: formValues.reason,
+        image: imageUrl,
+        status: "pending",
+        submittedAt: serverTimestamp(),
+      };
+
+      if (attendanceSnap.exists()) {
+        await updateDoc(attendanceRef, {
+          excuse: excuseData,
+        });
+      } else {
+        await setDoc(attendanceRef, {
+          excuse: excuseData,
+        });
+      }
+      Swal.fire({
+        icon: "success",
+        title: "Excuse Submitted",
+        text: "Your excuse has been submitted and is pending approval.",
+      });
+      fetchSubjectsAndAttendance();
+    } catch (error) {
+      console.error("Error submitting excuse", error);
+      Swal.fire({
+        icon: "error",
+        title: "Error",
+        text: "Could not submit excuse. Please try again later.",
+      });
+    }
+  };
+
+  // Inline AttendanceCard component inside Attendance component
   const AttendanceCard = ({
     subject,
     index,
@@ -389,17 +514,16 @@ const Attendance = () => {
     setActiveSubject,
     markAttendance,
   }) => {
-    // Determine if time-out is currently allowed (only applies when already timed in)
     let canTimeOut = true;
     let timeOutMessage = "Time Out Now";
-    
+
     if (subject.attendanceStatus === "timeIn") {
       const now = new Date();
       const currentDay = now.toLocaleString("en-US", { weekday: "long" });
       const todaysSchedule = subject.schedule?.find(
         (s) => s.day === currentDay
       );
-      
+
       if (todaysSchedule) {
         const currentHours = now.getHours();
         const currentMinutes = now.getMinutes();
@@ -409,13 +533,11 @@ const Attendance = () => {
         const currentTime12 = convertTo12HourFormat(currentTime24);
         const currentTimeInMinutes = timeToMinutes(currentTime12);
         const endTimeInMinutes = timeToMinutes(todaysSchedule.end);
-        
-        // If current time is more than 20 minutes after scheduled end, disable time-out
+
         if (currentTimeInMinutes > endTimeInMinutes + 20) {
           canTimeOut = false;
           timeOutMessage = "You forgot to time out (Absent)";
         } else if (currentTimeInMinutes < endTimeInMinutes) {
-          // If class hasn't ended yet
           canTimeOut = false;
           timeOutMessage = "Class still in session";
         }
@@ -433,7 +555,7 @@ const Attendance = () => {
       return "Mark Attendance";
     };
 
-    const isButtonDisabled =
+    const isMarkAttendanceDisabled =
       subject.attendanceStatus === "completed" ||
       (subject.attendanceStatus === "timeIn" && !canTimeOut);
 
@@ -511,36 +633,71 @@ const Attendance = () => {
 
           {activeSubject === index && (
             <div className="mt-4 pt-4 border-t border-gray-200">
-              <div className="space-y-2 mt-4">
-                <button
-                  className={`w-full text-white py-2 rounded text-sm transition-colors duration-200 focus:outline-none focus:ring-2 ${
-                    isButtonDisabled
-                      ? "bg-gray-400 cursor-not-allowed focus:ring-gray-300"
-                      : "bg-emerald-500 hover:bg-emerald-600 focus:ring-emerald-300"
-                  }`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (!isButtonDisabled) {
-                      markAttendance(subject);
-                    }
-                  }}
-                  disabled={isButtonDisabled}
-                >
-                  {getButtonText()}
-                </button>
-                {subject.attendanceStatus === "completed" && (
-                  <p className="text-xs text-center text-gray-500 mt-1">
-                    You've already recorded attendance for today
-                  </p>
-                )}
-                {subject.attendanceStatus === "timeIn" && !canTimeOut && (
-                  <p className="text-xs text-center text-gray-500 mt-1">
-                    {timeOutMessage.includes("Absent") 
-                      ? "You can no longer time out for this class"
-                      : "You can only time out after class ends"}
-                  </p>
-                )}
-              </div>
+              {subject.attendanceStatus === "none" ? (
+                <div className="space-y-2 mt-4">
+                  {!subject.excuseSubmitted && (
+                    <>
+                      <button
+                        className="w-full bg-emerald-500 hover:bg-emerald-600 text-white py-2 rounded text-sm transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-emerald-300"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          markAttendance(subject);
+                        }}
+                      >
+                        Mark Attendance
+                      </button>
+                      <button
+                        className="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 rounded text-sm transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          submitExcuse(subject);
+                        }}
+                      >
+                        Submit Excuse
+                      </button>
+                    </>
+                  )}
+                  {subject.excuseSubmitted && (
+                    <button
+                      className="w-full bg-gray-400 text-white py-2 rounded text-sm cursor-not-allowed"
+                      disabled
+                    >
+                      Pending Excuse
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-2 mt-4">
+                  <button
+                    className={`w-full text-white py-2 rounded text-sm transition-colors duration-200 focus:outline-none focus:ring-2 ${
+                      isMarkAttendanceDisabled
+                        ? "bg-gray-400 cursor-not-allowed focus:ring-gray-300"
+                        : "bg-emerald-500 hover:bg-emerald-600 focus:ring-emerald-300"
+                    }`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (!isMarkAttendanceDisabled) {
+                        markAttendance(subject);
+                      }
+                    }}
+                    disabled={isMarkAttendanceDisabled}
+                  >
+                    {getButtonText()}
+                  </button>
+                  {subject.attendanceStatus === "completed" && (
+                    <p className="text-xs text-center text-gray-500 mt-1">
+                      You've already recorded attendance for today
+                    </p>
+                  )}
+                  {subject.attendanceStatus === "timeIn" && !canTimeOut && (
+                    <p className="text-xs text-center text-gray-500 mt-1">
+                      {timeOutMessage.includes("Absent")
+                        ? "You can no longer time out for this class"
+                        : "You can only time out after class ends"}
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>
