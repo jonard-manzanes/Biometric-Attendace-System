@@ -24,19 +24,12 @@ const Login = () => {
   const directionIndexRef = useRef(0);
   const streamRef = useRef(null);
 
+  // ========== UTILITY FUNCTIONS ==========
   const clearScanning = () => {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-    if (progressIntervalRef.current) {
-      clearInterval(progressIntervalRef.current);
-      progressIntervalRef.current = null;
-    }
-    if (directionIntervalRef.current) {
-      clearInterval(directionIntervalRef.current);
-      directionIntervalRef.current = null;
-    }
+    [intervalRef, progressIntervalRef, directionIntervalRef].forEach(ref => {
+      if (ref.current) clearInterval(ref.current);
+      ref.current = null;
+    });
     setIsScanning(false);
   };
 
@@ -45,9 +38,7 @@ const Login = () => {
       streamRef.current.getTracks().forEach(track => track.stop());
       streamRef.current = null;
     }
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
-    }
+    if (videoRef.current) videoRef.current.srcObject = null;
   };
 
   const startCamera = async () => {
@@ -62,6 +53,7 @@ const Login = () => {
     }
   };
 
+  // ========== SECURITY FUNCTIONS ==========
   const sendVerificationCode = async (email, fullName) => {
     try {
       clearScanning();
@@ -69,16 +61,12 @@ const Login = () => {
       
       const code = Math.floor(100000 + Math.random() * 900000).toString();
       
-      await emailjs.send(
-        'service_uh90vsr',
-        'template_ssada75', 
-        {
-          passcode: code,
-          time: '15 minutes',
-          email: email,
-          app_name: 'BIO TRACK'
-        }
-      );
+      await emailjs.send('service_uh90vsr', 'template_ssada75', {
+        passcode: code,
+        time: '15 minutes',
+        email: email,
+        app_name: 'BIO TRACK'
+      });
 
       localStorage.setItem("tempVerificationCode", code);
       localStorage.setItem("tempVerificationEmail", email);
@@ -90,7 +78,48 @@ const Login = () => {
     }
   };
 
-  const verifyCode = async (userData, fullName, redirectPath) => {
+  // ========== ROLE-BASED LOGIN FLOW ==========
+  const handleSuccessfulLogin = (userData, fullName) => {
+    // Determine redirect path based on role (from Code 1)
+    let redirectPath = "/dashboard";
+    if (userData.role === "admin") {
+      redirectPath = "/admin/dashboard";
+    } else if (userData.role === "teacher") {
+      redirectPath = "/teacher/dashboard";
+    } else {
+      redirectPath = "/student/dashboard";
+    }
+
+    // Store user data (Code 1's localStorage structure)
+    const userToStore = {
+      ...userData,
+      fullName,
+      id: userData.studentId || userData.email,
+      docId: userData.docId,
+    };
+
+    localStorage.setItem("user", JSON.stringify(userToStore));
+    localStorage.setItem("userDocId", userData.docId);
+    localStorage.setItem("currentUserId", userData.uid || userData.docId);
+
+    if (userData.role === "student" && userData.studentId) {
+      localStorage.setItem("studentId", userData.studentId);
+    }
+
+    Swal.fire({
+      icon: "success",
+      title: `Welcome, ${fullName}`,
+      text: "You're being redirected to your dashboard",
+      timer: 2500,
+      showConfirmButton: false,
+      timerProgressBar: true,
+      didClose: () => {
+        window.location.href = redirectPath;
+      },
+    });
+  };
+
+  const verifyCode = async (userData, fullName) => {
     try {
       const code = await sendVerificationCode(userData.email, fullName);
       
@@ -121,36 +150,9 @@ const Login = () => {
         const storedEmail = localStorage.getItem("tempVerificationEmail");
         
         if (enteredCode === storedCode && storedEmail === userData.email) {
-          // Clear temporary verification items
           localStorage.removeItem("tempVerificationCode");
           localStorage.removeItem("tempVerificationEmail");
-          
-          // Store user session data (following Code 1's approach)
-          const userToStore = {
-            ...userData,
-            fullName,
-            id: userData.studentId || userData.email,
-            docId: userData.docId,
-          };
-
-          localStorage.setItem("user", JSON.stringify(userToStore));
-          localStorage.setItem("userDocId", userData.docId);
-          localStorage.setItem("currentUserId", userData.uid || userData.docId);
-
-          if (userData.role === "student" && userData.studentId) {
-            localStorage.setItem("studentId", userData.studentId);
-          }
-
-          await Swal.fire({
-            icon: "success",
-            title: `Welcome, ${fullName}`,
-            text: "Redirecting to dashboard...",
-            timer: 2000,
-            showConfirmButton: false,
-            didClose: () => {
-              window.location.href = redirectPath;
-            },
-          });
+          handleSuccessfulLogin(userData, fullName);
         } else {
           throw new Error("Invalid verification code");
         }
@@ -170,6 +172,7 @@ const Login = () => {
     }
   };
 
+  // ========== FACE SCANNING LOGIC ==========
   const changeDirection = () => {
     directionIndexRef.current = (directionIndexRef.current + 1) % directions.length;
     setCurrentDirection(directions[directionIndexRef.current]);
@@ -189,11 +192,15 @@ const Login = () => {
     setCurrentDirection("center");
     directionIndexRef.current = 0;
 
+    // Direction prompts (liveness detection)
     directionIntervalRef.current = setInterval(changeDirection, 2000);
+    
+    // Progress bar
     progressIntervalRef.current = setInterval(() => {
       setProgress(prev => prev >= 100 ? 100 : prev + 10);
     }, 1000);
 
+    // Face detection interval
     intervalRef.current = setInterval(async () => {
       try {
         const detection = await faceapi
@@ -211,20 +218,19 @@ const Login = () => {
 
           if (match.label !== "unknown") {
             const userData = userMapRef.current[match.label];
-            const redirectPath = userData.role === "admin" ? "/admin/dashboard" 
-                             : userData.role === "teacher" ? "/teacher/dashboard" 
-                             : "/student/dashboard";
+            const fullName = `${userData.firstName} ${
+              userData.middleInitial ? userData.middleInitial + " " : ""
+            }${userData.lastName}`;
 
-            const fullName = `${userData.firstName} ${userData.middleInitial ? userData.middleInitial + " " : ""}${userData.lastName}`;
-            await verifyCode(userData, fullName, redirectPath);
+            await verifyCode(userData, fullName);
           } else {
             clearScanning();
             setShowRetry(true);
             setStatus("Face not recognized");
             await Swal.fire({
               icon: "error",
-              title: "Not Recognized",
-              text: "No matching user found",
+              title: "Face Not Recognized",
+              text: "No matching user found in our database.",
               confirmButtonColor: "#10b981",
             });
           }
@@ -238,10 +244,11 @@ const Login = () => {
     }, 10000);
   };
 
+  // ========== INITIALIZATION ==========
   useEffect(() => {
     const init = async () => {
       try {
-        setStatus("Loading models...");
+        setStatus("Loading face recognition models...");
         await Promise.all([
           faceapi.nets.tinyFaceDetector.loadFromUri("/models/tiny_face_detector_model"),
           faceapi.nets.faceLandmark68Net.loadFromUri("/models/face_landmark_68_model"),
@@ -261,7 +268,9 @@ const Login = () => {
           if (Array.isArray(data.descriptor)) {
             const descriptor = new Float32Array(data.descriptor);
             const label = data.studentId || data.email;
-            labeledDescriptors.push(new faceapi.LabeledFaceDescriptors(label, [descriptor]));
+            labeledDescriptors.push(
+              new faceapi.LabeledFaceDescriptors(label, [descriptor])
+            );
             userMap[label] = {
               ...data,
               id: label,
@@ -272,7 +281,7 @@ const Login = () => {
         });
 
         if (labeledDescriptors.length === 0) {
-          setStatus("No users found");
+          setStatus("No registered users found.");
           setLoading(false);
           return;
         }
@@ -281,16 +290,27 @@ const Login = () => {
         userMapRef.current = userMap;
 
         setLoading(false);
-        setStatus("Ready for recognition");
+        setStatus("Ready for face recognition");
         startScanning();
       } catch (err) {
-        console.error("Init error:", err);
+        console.error(err);
         setStatus("Initialization failed");
         setLoading(false);
+
         Swal.fire({
           icon: "error",
-          title: "Error",
-          text: "Failed to initialize camera or models",
+          title: "Initialization Failed",
+          html: `
+            <div class="text-center">
+              <p class="mb-4">Could not load models or camera.</p>
+              <p class="text-sm text-gray-600">Please ensure:</p>
+              <ul class="text-sm text-gray-600 text-left list-disc list-inside mx-auto max-w-xs">
+                <li>Camera permissions are granted</li>
+                <li>You're in a well-lit area</li>
+                <li>Your browser supports WebRTC</li>
+              </ul>
+            </div>
+          `,
           confirmButtonColor: "#10b981",
         });
       }
@@ -304,6 +324,7 @@ const Login = () => {
     };
   }, []);
 
+  // ========== UI HELPERS ==========
   const getDirectionInstruction = () => {
     switch (currentDirection) {
       case "left": return "Turn head left";
@@ -314,6 +335,7 @@ const Login = () => {
     }
   };
 
+  // ========== RENDER ==========
   return (
     <div className="min-h-screen flex flex-col justify-center items-center gap-4 bg-gradient-to-br from-emerald-900 to-emerald-700 p-4">
       <div className="text-center mb-4">
@@ -323,11 +345,11 @@ const Login = () => {
 
       <div className="relative w-full max-w-md">
         <div className="relative w-full max-w-md aspect-square mx-auto rounded-2xl overflow-hidden border-4 border-emerald-400 shadow-xl">
-          <video 
-            ref={videoRef} 
-            autoPlay 
-            muted 
-            className="w-full h-full object-cover" 
+          <video
+            ref={videoRef}
+            autoPlay
+            muted
+            className="w-full h-full object-cover"
             playsInline
           />
           
@@ -346,8 +368,8 @@ const Login = () => {
               <div className="h-88 w-88 rounded-full border-4 border-emerald-400 border-t-transparent animate-spin"></div>
             </div>
             <div className="absolute -bottom-6 left-0 right-0 h-2 bg-emerald-900 rounded-full overflow-hidden">
-              <div 
-                className="h-full bg-emerald-400 transition-all duration-300 ease-out" 
+              <div
+                className="h-full bg-emerald-400 transition-all duration-300 ease-out"
                 style={{ width: `${progress}%` }}
               />
             </div>
@@ -372,21 +394,38 @@ const Login = () => {
             </div>
 
             {showRetry && (
-              <button
-                onClick={startScanning}
-                disabled={isScanning}
-                className="w-full py-2 px-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg shadow-md transition-all duration-300"
-              >
-                {isScanning ? "Scanning..." : "Try Again"}
-              </button>
+              <div className="flex justify-center gap-4">
+                <button
+                  onClick={startScanning}
+                  className="px-6 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg shadow-md transition-all duration-300 flex items-center gap-2"
+                  disabled={isScanning}
+                >
+                  {isScanning ? (
+                    <>
+                      <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Scanning...
+                    </>
+                  ) : (
+                    <>
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
+                      </svg>
+                      Try Again
+                    </>
+                  )}
+                </button>
+              </div>
             )}
           </div>
 
-          <div className="mt-4 text-center text-white text-sm">
+          <div className="mt-2 text-center text-white text-sm">
             <p className="mb-2">Don't have an account?</p>
-            <a 
-              href="/signup" 
+            <a
               className="inline-block px-4 py-2 bg-white/10 hover:bg-white/20 text-emerald-100 rounded-lg transition-colors duration-300"
+              href="/signup"
             >
               Register Now
             </a>
@@ -399,6 +438,10 @@ const Login = () => {
           </div>
         </>
       )}
+
+      <div className="mt-8 text-center text-emerald-300/50 text-xs">
+        <p>Ensure your face is clearly visible in the frame</p>
+      </div>
     </div>
   );
 };
