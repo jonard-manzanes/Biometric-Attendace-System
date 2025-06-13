@@ -12,26 +12,10 @@ import {
   doc,
   serverTimestamp,
 } from "firebase/firestore";
+import emailjs from '@emailjs/browser';
 
-const FORMSPREE_ENDPOINT = "https://formspree.io/f/xanjovqw"; // Replace with your Formspree endpoint
-
-const sendSuccessEmail = async (email, firstName) => {
-  try {
-    const response = await fetch(FORMSPREE_ENDPOINT, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        email: email,
-        message: `Hello ${firstName}, your registration was successful!`,
-      }),
-    });
-    if (!response.ok) throw new Error("Failed to send email");
-    return true;
-  } catch (error) {
-    console.error("Failed to send email:", error);
-    return false;
-  }
-};
+// Initialize EmailJS with your Public Key
+emailjs.init('yQ8skMDEGxmHl4fgX');
 
 const SignUp = () => {
   const videoRef = useRef();
@@ -53,15 +37,9 @@ const SignUp = () => {
       try {
         setStatus("Loading face recognition models...");
         await Promise.all([
-          faceapi.nets.tinyFaceDetector.loadFromUri(
-            "/models/tiny_face_detector_model"
-          ),
-          faceapi.nets.faceLandmark68Net.loadFromUri(
-            "/models/face_landmark_68_model"
-          ),
-          faceapi.nets.faceRecognitionNet.loadFromUri(
-            "/models/face_recognition_model"
-          ),
+          faceapi.nets.tinyFaceDetector.loadFromUri("/models/tiny_face_detector_model"),
+          faceapi.nets.faceLandmark68Net.loadFromUri("/models/face_landmark_68_model"),
+          faceapi.nets.faceRecognitionNet.loadFromUri("/models/face_recognition_model"),
         ]);
 
         setStatus("Accessing camera...");
@@ -86,16 +64,15 @@ const SignUp = () => {
 
     return () => {
       if (videoRef.current?.srcObject) {
-        videoRef.current.srcObject.getTracks().forEach((track) => track.stop());
+        videoRef.current.srcObject.getTracks().forEach(track => track.stop());
       }
     };
   }, []);
 
   const changeDirection = () => {
-    directionIndexRef.current =
-      (directionIndexRef.current + 1) % directions.length;
+    directionIndexRef.current = (directionIndexRef.current + 1) % directions.length;
     setCurrentDirection(directions[directionIndexRef.current]);
-
+    
     if (directionIndexRef.current === directions.length - 1) {
       setTimeout(() => {
         setCurrentDirection("center");
@@ -107,12 +84,43 @@ const SignUp = () => {
     setIsScanning(true);
     setStatus("Please follow the head movement instructions");
     const interval = setInterval(changeDirection, 2000);
-
+    
     return () => {
       clearInterval(interval);
       setIsScanning(false);
       setCurrentDirection("center");
     };
+  };
+
+  const sendSuccessEmail = async (email, firstName) => {
+    try {
+      const response = await emailjs.send(
+        'service_uh90vsr', // Your EmailJS Service ID
+        'template_zfw25qd', // Your EmailJS Template ID
+        {
+          name: firstName,
+          email: email,
+          studentId: studentId,
+          date: new Date().toLocaleDateString()
+        }
+      );
+      
+      console.log('Email sent successfully:', {
+        status: response.status,
+        text: response.text,
+        email: email
+      });
+      
+      return true;
+    } catch (error) {
+      console.error('Failed to send email:', {
+        code: error.code,
+        message: error.message,
+        text: error.text,
+        response: error.response
+      });
+      return false;
+    }
   };
 
   const captureSnapshot = () => {
@@ -142,10 +150,7 @@ const SignUp = () => {
 
     for (const doc of querySnapshot.docs) {
       const existingDescriptor = doc.data().descriptor;
-      const distance = faceapi.euclideanDistance(
-        descriptor,
-        existingDescriptor
-      );
+      const distance = faceapi.euclideanDistance(descriptor, existingDescriptor);
       if (distance < 0.3) {
         return true;
       }
@@ -157,12 +162,7 @@ const SignUp = () => {
     e.preventDefault();
     setIsLoading(true);
 
-    if (
-      !firstName.trim() ||
-      !lastName.trim() ||
-      !studentId.trim() ||
-      !email.trim()
-    ) {
+    if (!firstName.trim() || !lastName.trim() || !studentId.trim() || !email.trim()) {
       Swal.fire({
         icon: "warning",
         title: "Missing Information",
@@ -187,21 +187,16 @@ const SignUp = () => {
       // First complete face registration
       const stopScanning = startFaceScan();
       setStatus("Detecting face...");
-
+      
       const detection = await faceapi
-        .detectSingleFace(
-          videoRef.current,
-          new faceapi.TinyFaceDetectorOptions()
-        )
+        .detectSingleFace(videoRef.current, new faceapi.TinyFaceDetectorOptions())
         .withFaceLandmarks()
         .withFaceDescriptor();
 
       stopScanning();
 
       if (!detection) {
-        throw new Error(
-          "No face detected. Please ensure your face is visible and well-lit."
-        );
+        throw new Error("No face detected. Please ensure your face is visible and well-lit.");
       }
 
       const descriptor = Array.from(detection.descriptor);
@@ -241,19 +236,16 @@ const SignUp = () => {
 
       // Send confirmation email after successful registration
       const emailSent = await sendSuccessEmail(email, firstName);
-
+      
       await Swal.fire({
         icon: "success",
         title: "Registration Complete",
         html: `
           <div>
             <p>Registration successful!</p>
-            ${
-              emailSent
-                ? '<p class="text-green-500">Confirmation email sent to ' +
-                  email +
-                  "</p>"
-                : '<p class="text-yellow-500">Registration complete but email could not be sent</p>'
+            ${emailSent ? 
+              '<p class="text-green-500">Confirmation email sent to ' + email + '</p>' : 
+              '<p class="text-yellow-500">Registration complete but email could not be sent</p>'
             }
             <p class="text-sm mt-2">Student ID: ${studentId}</p>
           </div>
@@ -268,7 +260,7 @@ const SignUp = () => {
       setEmail("");
       setStatus("Registration successful!");
     } catch (error) {
-      console.error("Registration Error:", error);
+      console.error('Registration Error:', error);
       Swal.fire({
         icon: "error",
         title: "Registration Failed",
@@ -307,7 +299,7 @@ const SignUp = () => {
       confirmButtonColor: "#10b981",
       cancelButtonColor: "#ef4444",
       preConfirm: () => {
-        const codeInput = Swal.getPopup().querySelector("#inviteCode");
+        const codeInput = Swal.getPopup().querySelector('#inviteCode');
         if (!codeInput.value) {
           Swal.showValidationMessage("Please enter a code");
           return false;
@@ -347,16 +339,11 @@ const SignUp = () => {
 
   const getDirectionInstruction = () => {
     switch (currentDirection) {
-      case "left":
-        return "Please turn your head slowly to the left";
-      case "right":
-        return "Please turn your head slowly to the right";
-      case "up":
-        return "Please look up slowly";
-      case "down":
-        return "Please look down slowly";
-      default:
-        return "Please look straight at the camera";
+      case "left": return "Please turn your head slowly to the left";
+      case "right": return "Please turn your head slowly to the right";
+      case "up": return "Please look up slowly";
+      case "down": return "Please look down slowly";
+      default: return "Please look straight at the camera";
     }
   };
 
@@ -374,7 +361,7 @@ const SignUp = () => {
                 className="w-full h-full rounded-xl object-cover border-4 border-emerald-400 shadow-lg"
               />
               <canvas ref={canvasRef} className="hidden" />
-
+              
               {isScanning && currentDirection !== "center" && (
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                   <div className="text-white text-xl font-bold bg-black/50 px-4 py-2 rounded-lg animate-pulse">
@@ -383,15 +370,13 @@ const SignUp = () => {
                 </div>
               )}
             </div>
-
+            
             <div className="text-center w-full">
               <p className="text-emerald-100 font-medium bg-emerald-800/50 rounded-lg py-2 px-4">
                 {isScanning ? getDirectionInstruction() : status}
               </p>
               <p className="text-emerald-200 text-sm mt-3">
-                {isScanning
-                  ? "Follow the instructions for better face capture"
-                  : "Position your face in the center of the frame"}
+                {isScanning ? "Follow the instructions for better face capture" : "Position your face in the center of the frame"}
               </p>
             </div>
           </div>
@@ -405,9 +390,7 @@ const SignUp = () => {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-emerald-100 mb-1">
-                    First Name*
-                  </label>
+                  <label className="block text-emerald-100 mb-1">First Name*</label>
                   <input
                     type="text"
                     value={firstName}
@@ -417,9 +400,7 @@ const SignUp = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-emerald-100 mb-1">
-                    Last Name*
-                  </label>
+                  <label className="block text-emerald-100 mb-1">Last Name*</label>
                   <input
                     type="text"
                     value={lastName}
@@ -431,9 +412,7 @@ const SignUp = () => {
               </div>
 
               <div>
-                <label className="block text-emerald-100 mb-1">
-                  Student ID*
-                </label>
+                <label className="block text-emerald-100 mb-1">Student ID*</label>
                 <input
                   type="text"
                   value={studentId}
@@ -455,9 +434,7 @@ const SignUp = () => {
               </div>
 
               <div className="bg-emerald-900/30 p-3 rounded-lg">
-                <p className="text-emerald-100 text-sm font-medium">
-                  Registration Process:
-                </p>
+                <p className="text-emerald-100 text-sm font-medium">Registration Process:</p>
                 <ul className="text-emerald-200 text-xs list-disc list-inside mt-1">
                   <li>Enter your information</li>
                   <li>Complete face registration</li>
@@ -469,32 +446,14 @@ const SignUp = () => {
                 type="submit"
                 disabled={isLoading}
                 className={`w-full py-3 px-4 rounded-lg font-semibold transition-colors ${
-                  isLoading
-                    ? "bg-emerald-700 cursor-not-allowed"
-                    : "bg-emerald-600 hover:bg-emerald-500"
+                  isLoading ? "bg-emerald-700 cursor-not-allowed" : "bg-emerald-600 hover:bg-emerald-500"
                 } text-white flex items-center justify-center`}
               >
                 {isLoading ? (
                   <>
-                    <svg
-                      className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
-                      xmlns="http://www.w3.org/2000/svg"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                    >
-                      <circle
-                        className="opacity-25"
-                        cx="12"
-                        cy="12"
-                        r="10"
-                        stroke="currentColor"
-                        strokeWidth="4"
-                      ></circle>
-                      <path
-                        className="opacity-75"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                      ></path>
+                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
                     Processing...
                   </>
@@ -504,10 +463,7 @@ const SignUp = () => {
               </button>
 
               <div className="flex flex-col sm:flex-row justify-between items-center pt-4 border-t border-emerald-800/50">
-                <a
-                  href="/login"
-                  className="text-emerald-300 hover:text-white text-sm mb-2 sm:mb-0"
-                >
+                <a href="/login" className="text-emerald-300 hover:text-white text-sm mb-2 sm:mb-0">
                   Already have an account? Login
                 </a>
                 <button
