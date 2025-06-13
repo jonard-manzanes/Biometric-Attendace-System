@@ -22,14 +22,10 @@ const TeacherSignUp = () => {
   const [lastName, setLastName] = useState("");
   const [employeeId, setEmployeeId] = useState("");
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
   const [status, setStatus] = useState("Initializing camera...");
   const [isLoading, setIsLoading] = useState(false);
-  const role = "teacher";
-  const [passwordError, setPasswordError] = useState("");
-  const [emailError, setEmailError] = useState("");
   const [loading, setLoading] = useState(true);
+  const role = "teacher";
 
   useEffect(() => {
     const verifyAuthorization = async () => {
@@ -105,26 +101,6 @@ const TeacherSignUp = () => {
     return re.test(email);
   };
 
-  const validatePassword = (password) => {
-    const errors = [];
-    if (password.length < 8) {
-      errors.push("at least 8 characters");
-    }
-    if (!/[A-Z]/.test(password)) {
-      errors.push("one uppercase letter");
-    }
-    if (!/[a-z]/.test(password)) {
-      errors.push("one lowercase letter");
-    }
-    if (!/[0-9]/.test(password)) {
-      errors.push("one number");
-    }
-    if (!/[!@#$%^&*(),.?":{}|<>]/.test(password)) {
-      errors.push("one special character");
-    }
-    return errors;
-  };
-
   const captureSnapshot = () => {
     const video = videoRef.current;
     const canvas = canvasRef.current;
@@ -167,36 +143,6 @@ const TeacherSignUp = () => {
     e.preventDefault();
     setIsLoading(true);
 
-    const passwordErrors = validatePassword(password);
-    if (passwordErrors.length > 0) {
-      Swal.fire({
-        icon: "error",
-        title: "Password Requirements Not Met",
-        html: `
-          <div class="text-left">
-            <p class="mb-2">Your password must contain:</p>
-            <ul class="list-disc list-inside">
-              ${passwordErrors.map(err => `<li>${err}</li>`).join('')}
-            </ul>
-          </div>
-        `,
-        confirmButtonColor: "#10b981",
-      });
-      setIsLoading(false);
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      Swal.fire({
-        icon: "error",
-        title: "Password Mismatch",
-        text: "The passwords you entered do not match.",
-        confirmButtonColor: "#10b981",
-      });
-      setIsLoading(false);
-      return;
-    }
-
     if (!firstName.trim() || !lastName.trim() || !employeeId.trim() || !email.trim()) {
       Swal.fire({
         icon: "warning",
@@ -209,7 +155,12 @@ const TeacherSignUp = () => {
     }
 
     if (!validateEmail(email)) {
-      setEmailError("Please enter a valid email address");
+      Swal.fire({
+        icon: "error",
+        title: "Invalid Email",
+        text: "Please enter a valid email address.",
+        confirmButtonColor: "#10b981",
+      });
       setIsLoading(false);
       return;
     }
@@ -244,7 +195,6 @@ const TeacherSignUp = () => {
           descriptor,
           image: snapshot,
           email,
-          password,
           updatedAt: serverTimestamp(),
         });
 
@@ -260,7 +210,6 @@ const TeacherSignUp = () => {
           lastName,
           studentId: employeeId,
           email,
-          password,
           role,
           descriptor,
           image: snapshot,
@@ -281,8 +230,6 @@ const TeacherSignUp = () => {
       setLastName("");
       setEmployeeId("");
       setEmail("");
-      setPassword("");
-      setConfirmPassword("");
       navigate("/login");
     } catch (error) {
       console.error(error);
@@ -310,7 +257,7 @@ const TeacherSignUp = () => {
     <div className="min-h-screen bg-gradient-to-br from-emerald-900 to-emerald-700 flex items-center justify-center p-4 sm:p-6">
       <div className="w-full max-w-6xl bg-white/5 backdrop-blur-md rounded-2xl shadow-xl overflow-hidden">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-0">
-          {/* Left side - Camera Preview */}
+          {/* Camera Preview */}
           <div className="bg-emerald-900/30 p-6 flex flex-col items-center justify-center">
             <div className="relative w-full max-w-xs aspect-square mb-6">
               <video
@@ -338,7 +285,7 @@ const TeacherSignUp = () => {
             </div>
           </div>
 
-          {/* Right side - Registration Form */}
+          {/* Registration Form */}
           <div className="bg-white/5 p-6 sm:p-8">
             <h1 className="text-2xl sm:text-3xl font-bold text-white text-center mb-6">
               Teacher Registration
@@ -384,53 +331,20 @@ const TeacherSignUp = () => {
                 <input
                   type="email"
                   value={email}
-                  onChange={(e) => {
-                    setEmail(e.target.value);
-                    if (e.target.value && !validateEmail(e.target.value)) {
-                      setEmailError("Please enter a valid email address");
-                    } else {
-                      setEmailError("");
-                    }
-                  }}
+                  onChange={(e) => setEmail(e.target.value)}
                   className="w-full px-4 py-2 bg-white/10 border border-emerald-400/50 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                   required
                 />
-                {emailError && (
-                  <p className="text-red-400 text-sm mt-1">{emailError}</p>
-                )}
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-emerald-100 mb-1">Password*</label>
-                  <input
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full px-4 py-2 bg-white/10 border border-emerald-400/50 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-emerald-100 mb-1">Confirm Password*</label>
-                  <input
-                    type="password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="w-full px-4 py-2 bg-white/10 border border-emerald-400/50 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                    required
-                  />
-                </div>
               </div>
 
               <div className="bg-emerald-900/30 p-3 rounded-lg">
-                <p className="text-emerald-100 text-sm font-medium">Password Requirements:</p>
+                <p className="text-emerald-100 text-sm font-medium">
+                  Registration Process:
+                </p>
                 <ul className="text-emerald-200 text-xs list-disc list-inside mt-1">
-                  <li>Minimum 8 characters</li>
-                  <li>At least 1 uppercase letter</li>
-                  <li>At least 1 lowercase letter</li>
-                  <li>At least 1 number</li>
-                  <li>At least 1 special character</li>
+                  <li>Enter your information</li>
+                  <li>Complete face registration</li>
+                  <li>Registration confirmation</li>
                 </ul>
               </div>
 

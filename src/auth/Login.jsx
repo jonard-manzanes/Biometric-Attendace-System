@@ -3,9 +3,6 @@ import * as faceapi from "face-api.js";
 import Swal from "sweetalert2";
 import { db } from "../firebaseConfig";
 import { collection, getDocs } from "firebase/firestore";
-import emailjs from "@emailjs/browser";
-
-emailjs.init("yQ8skMDEGxmHl4fgX");
 
 const Login = () => {
   const videoRef = useRef();
@@ -54,6 +51,7 @@ const Login = () => {
   };
 
   // ========== SECURITY FUNCTIONS ==========
+  // Replace sendVerificationCode with Formspree POST
   const sendVerificationCode = async (email, fullName) => {
     try {
       clearScanning();
@@ -61,12 +59,26 @@ const Login = () => {
 
       const code = Math.floor(100000 + Math.random() * 900000).toString();
 
-      await emailjs.send("service_uh90vsr", "template_ssada75", {
-        passcode: code,
-        time: "15 minutes",
-        email: email,
-        app_name: "BIO TRACK",
+      // Send POST request to Formspree
+      const response = await fetch("https://formspree.io/f/xanjovqw", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          email: email,
+          message: `Your BIO TRACK verification code is: ${code}\n\nThis code is valid for 15 minutes.`,
+          fullName: fullName,
+          app_name: "BIO TRACK",
+          passcode: code,
+          time: "15 minutes",
+        }),
       });
+
+      if (!response.ok) {
+        throw new Error("Failed to send verification email");
+      }
 
       localStorage.setItem("tempVerificationCode", code);
       localStorage.setItem("tempVerificationEmail", email);
