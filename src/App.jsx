@@ -23,7 +23,7 @@ import Reports from "./admin/Reports";
 import AccessCodes from "./admin/AccessCodes";
 import QuickAttendance from "./auth/quickAttendance";
 
-import Staff from "./staff/staff_page";
+import Staff from "./staff/Staff_page";
 
 function App() {
   return (
