@@ -50,11 +50,25 @@ const Reports = () => {
   });
   const [showHolidayForm, setShowHolidayForm] = useState(false);
 
+  // Get current teacher ID
+  const getTeacherId = () => {
+    const storedUserDocId = localStorage.getItem("userDocId");
+    if (storedUserDocId) return storedUserDocId;
+
+    const userString = localStorage.getItem("user");
+    if (userString) {
+      const user = JSON.parse(userString);
+      return user.docId || user.uid;
+    }
+
+    return null;
+  };
+
   // Fetch teacher info, classes, and holidays
   useEffect(() => {
     const fetchTeacherInfoAndClasses = async () => {
       try {
-        const teacherId = localStorage.getItem("userDocId");
+        const teacherId = getTeacherId();
         if (!teacherId) {
           setError("Teacher ID not found in localStorage");
           return;
@@ -67,12 +81,14 @@ const Reports = () => {
           setTeacherInfo(teacherSnap.data());
         }
 
-        // Fetch classes
-        const classesCol = collection(db, "classes");
-        const q = query(classesCol, where("teacherID", "==", teacherId));
-        const querySnapshot = await getDocs(q);
+        // Fetch only classes that belong to this teacher
+        const classesQuery = query(
+          collection(db, "classes"),
+          where("teacherID", "==", teacherId)
+        );
+        const classesSnapshot = await getDocs(classesQuery);
 
-        const classesData = querySnapshot.docs.map((doc) => ({
+        const classesData = classesSnapshot.docs.map((doc) => ({
           id: doc.id,
           ...doc.data(),
         }));
@@ -83,10 +99,9 @@ const Reports = () => {
           setClassSchedule(classesData[0].schedule || []);
         }
 
-        // Fetch holidays
-        const holidaysCol = collection(db, "holidays");
+        // Fetch holidays for this teacher only
         const holidaysQuery = query(
-          holidaysCol,
+          collection(db, "holidays"),
           where("teacherId", "==", teacherId)
         );
         const holidaysSnapshot = await getDocs(holidaysQuery);
@@ -118,16 +133,13 @@ const Reports = () => {
   const filterDatesBySchedule = (dates) => {
     if (!classSchedule || classSchedule.length === 0) return dates;
 
-    // Only include schedule entries with a valid 'day'
     const scheduleDays = classSchedule
       .filter((s) => s && typeof s.day === "string")
       .map((s) => s.day.toLowerCase());
 
-    // Get holiday dates
     const holidayDates = holidays.map((h) => h.date);
 
     return dates.filter((date) => {
-      // Skip if it's a holiday
       if (holidayDates.includes(date)) return false;
 
       const parsedDate = parseISO(date);
@@ -164,7 +176,6 @@ const Reports = () => {
       setLoading(true);
       setError(null);
       try {
-        // Get class document
         const classRef = doc(db, "classes", selectedClass);
         const classSnap = await getDoc(classRef);
         if (!classSnap.exists()) {
@@ -212,7 +223,6 @@ const Reports = () => {
             const records = await Promise.all(
               dateArray.map(async (date) => {
                 try {
-                  // Build attendance document path using attendanceClassID
                   const attendanceRef = doc(
                     db,
                     "attendance",
@@ -223,7 +233,6 @@ const Reports = () => {
                   const attendanceSnap = await getDoc(attendanceRef);
                   if (attendanceSnap.exists()) {
                     const data = attendanceSnap.data() || {};
-                    // Convert timestamps to Date objects
                     let timeIn = data.timeIn
                       ? typeof data.timeIn.toDate === "function"
                         ? data.timeIn.toDate()
@@ -235,7 +244,6 @@ const Reports = () => {
                         : new Date(data.timeOut)
                       : null;
 
-                    // Get excuse information if exists
                     let excuseInfo = null;
                     if (data.excuse) {
                       excuseInfo = {
@@ -245,7 +253,6 @@ const Reports = () => {
                       };
                     }
 
-                    // Check if timeIn/timeOut are during scheduled class time
                     const timeInStr = timeIn ? format(timeIn, "HH:mm") : null;
                     const timeOutStr = timeOut
                       ? format(timeOut, "HH:mm")
@@ -331,12 +338,12 @@ const Reports = () => {
     });
   };
 
-  // Add new holiday
+  // Add new holiday for current teacher
   const addHoliday = async () => {
     try {
-      const teacherId = localStorage.getItem("userDocId");
+      const teacherId = getTeacherId();
       if (!teacherId) {
-        setError("Teacher ID not found in localStorage");
+        setError("Teacher ID not found");
         return;
       }
 
@@ -373,28 +380,23 @@ const Reports = () => {
     }
   };
 
-  // Download attendance report as CSV for the selected date range
+  // Download attendance report as CSV
   const downloadAttendanceReport = () => {
     if (!selectedClass || attendanceData.length === 0) return;
 
-    // Get class info
     const classInfo = classes.find((c) => c.id === selectedClass);
     if (!classInfo) return;
 
-    // Get date range
     const startDate = dateRange.start;
     const endDate = dateRange.end;
 
-    // Prepare CSV content
     const headers = ["Student Name"];
     const dateColumns = attendanceData[0].records.map(record => record.date);
     
-    // Add date columns to headers
     dateColumns.forEach(date => {
       headers.push(format(parseISO(date), "MMM d (EEEE)"));
     });
 
-    // Prepare student rows
     const studentRows = attendanceData.map(student => {
       const row = [student.studentName];
       student.records.forEach(record => {
@@ -407,7 +409,6 @@ const Reports = () => {
       return row;
     });
 
-    // Combine all data
     const csvContent = [
       ["Attendance Report", "", "", "", ""],
       ["Date Range:", `${startDate} to ${endDate}`, "", "", ""],
@@ -434,7 +435,6 @@ const Reports = () => {
       .map(row => row.join(","))
       .join("\n");
 
-    // Create download link
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -453,7 +453,6 @@ const Reports = () => {
   const aggregatedData = useMemo(() => {
     if (attendanceData.length === 0) return null;
 
-    // Get date labels from the first student's records
     const dates = attendanceData[0].records.map((rec) => rec.date);
     const presentCounts = dates.map((date) =>
       attendanceData.reduce((sum, student) => {
