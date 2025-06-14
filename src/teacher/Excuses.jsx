@@ -16,6 +16,7 @@ const Excuses = () => {
   const [loading, setLoading] = useState(true);
   const [selectedExcuse, setSelectedExcuse] = useState(null);
   const [activeTab, setActiveTab] = useState("pending");
+  const [classSchedules, setClassSchedules] = useState({});
 
   const getUserId = () => {
     const storedUserDocId = localStorage.getItem("userDocId");
@@ -30,78 +31,144 @@ const Excuses = () => {
     return null;
   };
 
-  useEffect(() => {
-    const fetchExcuses = async () => {
-      setLoading(true);
-      const teacherId = getUserId();
+  const fetchStudentNames = async (studentIds) => {
+    if (studentIds.length === 0) return {};
+    
+    const batchSize = 10;
+    const batches = [];
+    
+    for (let i = 0; i < studentIds.length; i += batchSize) {
+      batches.push(studentIds.slice(i, i + batchSize));
+    }
+
+    const studentMap = {};
+    
+    for (const batch of batches) {
+      const studentsQuery = query(
+        collection(db, "users"),
+        where("__name__", "in", batch)
+      );
+      const studentsSnap = await getDocs(studentsQuery);
       
-      if (!teacherId) {
-        console.error("No teacher ID found");
-        setLoading(false);
-        return;
-      }
+      studentsSnap.forEach(doc => {
+        const data = doc.data();
+        studentMap[doc.id] = `${data.firstName} ${data.lastName}`;
+      });
+    }
+    
+    return studentMap;
+  };
 
-      try {
-        // Fetch only classes that belong to this teacher
-        const classesQuery = query(
-          collection(db, "classes"),
-          where("teacherID", "==", teacherId)
-        );
-        const classesSnap = await getDocs(classesQuery);
-        const classes = classesSnap.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
+  const fetchClassSchedules = async (classes) => {
+    const schedules = {};
+    classes.forEach(cls => {
+      const classID = cls.joinCode || cls.subjectName.replace(/\s/g, "_");
+      schedules[classID] = {
+        className: cls.subjectName,
+        schedule: cls.schedule || []
+      };
+    });
+    return schedules;
+  };
 
-        // Fetch excuses for the past month
-        const today = new Date();
-        const oneMonthAgo = new Date();
-        oneMonthAgo.setMonth(today.getMonth() - 1);
-        const dateRange = eachDayOfInterval({
-          start: oneMonthAgo,
-          end: today,
-        }).map((date) => format(date, "yyyy-MM-dd"));
+  const formatSchedule = (schedule) => {
+    if (!schedule || schedule.length === 0) return "No schedule available";
+    
+    return schedule.map(s => (
+      `${s.day}: ${s.start} - ${s.end}`
+    )).join(", ");
+  };
 
-        const excusesData = [];
-        for (const cls of classes) {
-          const classID = cls.joinCode || cls.subjectName.replace(/\s/g, "_");
-          
-          for (const date of dateRange) {
-            try {
-              const studentsCol = collection(db, "attendance", classID, date);
-              const studentsSnap = await getDocs(studentsCol);
+  const fetchExcuses = async () => {
+    setLoading(true);
+    const teacherId = getUserId();
+    
+    if (!teacherId) {
+      console.error("No teacher ID found");
+      setLoading(false);
+      return;
+    }
 
-              studentsSnap.forEach((studentDoc) => {
-                const data = studentDoc.data();
-                if (data.excuse) {
-                  excusesData.push({
-                    id: `${classID}-${date}-${studentDoc.id}`,
-                    studentId: studentDoc.id,
-                    studentName: data.studentName || studentDoc.id,
-                    classID,
-                    className: cls.subjectName,
-                    date,
-                    reason: data.excuse.reason,
-                    status: data.excuse.status || "pending",
-                    image: data.excuse.image,
-                    submittedAt: data.excuse.submittedAt?.toDate() || new Date(),
-                  });
-                }
-              });
-            } catch (error) {
-              console.error(`Error processing ${date} for ${cls.subjectName}:`, error);
-            }
+    try {
+      // Fetch teacher's classes
+      const classesQuery = query(
+        collection(db, "classes"),
+        where("teacherID", "==", teacherId)
+      );
+      const classesSnap = await getDocs(classesQuery);
+      const classes = classesSnap.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+
+      // Store class schedules
+      const schedules = await fetchClassSchedules(classes);
+      setClassSchedules(schedules);
+
+      // Get date range for the past month
+      const today = new Date();
+      const oneMonthAgo = new Date();
+      oneMonthAgo.setMonth(today.getMonth() - 1);
+      const dateRange = eachDayOfInterval({
+        start: oneMonthAgo,
+        end: today,
+      }).map(date => format(date, "yyyy-MM-dd"));
+
+      // Collect all excuses and student IDs
+      const excusesData = [];
+      const studentIds = new Set();
+
+      for (const cls of classes) {
+        const classID = cls.joinCode || cls.subjectName.replace(/\s/g, "_");
+        
+        for (const date of dateRange) {
+          try {
+            const studentsCol = collection(db, "attendance", classID, date);
+            const studentsSnap = await getDocs(studentsCol);
+
+            studentsSnap.forEach(studentDoc => {
+              const data = studentDoc.data();
+              if (data.excuse) {
+                excusesData.push({
+                  id: `${classID}-${date}-${studentDoc.id}`,
+                  studentId: studentDoc.id,
+                  classID,
+                  className: cls.subjectName,
+                  date,
+                  reason: data.excuse.reason,
+                  status: data.excuse.status || "pending",
+                  image: data.excuse.image,
+                  submittedAt: data.excuse.submittedAt?.toDate() || new Date(),
+                  schedule: cls.schedule || []
+                });
+                studentIds.add(studentDoc.id);
+              }
+            });
+          } catch (error) {
+            console.error(`Error processing ${date} for ${cls.subjectName}:`, error);
           }
         }
-
-        setExcuses(excusesData.sort((a, b) => b.submittedAt - a.submittedAt));
-      } catch (error) {
-        console.error("Error fetching excuses:", error);
-      } finally {
-        setLoading(false);
       }
-    };
 
+      // Fetch student names in batches
+      const studentMap = await fetchStudentNames([...studentIds]);
+
+      // Map names to excuses
+      const excusesWithNames = excusesData.map(excuse => ({
+        ...excuse,
+        studentName: studentMap[excuse.studentId] || `Student (${excuse.studentId.slice(0, 6)})`,
+        formattedSchedule: formatSchedule(excuse.schedule)
+      }));
+
+      setExcuses(excusesWithNames.sort((a, b) => b.submittedAt - a.submittedAt));
+    } catch (error) {
+      console.error("Error fetching excuses:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchExcuses();
   }, []);
 
@@ -197,9 +264,9 @@ const Excuses = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 p-4 md:p-6">
       {/* Header */}
-      <div className="bg-white rounded-lg shadow-sm p-3 mb-6">
+      <div className="bg-white rounded-lg shadow-sm p-4 md:p-6 mb-6">
         <h1 className="text-2xl font-bold text-gray-800 mb-1">Student Excuses</h1>
         <p className="text-gray-600">
           {filteredExcuses.length} {activeTab} excuse{filteredExcuses.length !== 1 ? "s" : ""}
@@ -270,6 +337,11 @@ const Excuses = () => {
                   <p className="text-sm font-medium">{formatDate(excuse.date)}</p>
                 </div>
 
+                <div>
+                  <p className="text-xs text-gray-500 mb-1">Class Schedule</p>
+                  <p className="text-sm font-medium">{excuse.formattedSchedule}</p>
+                </div>
+
                 <div className="pt-2 border-t border-gray-100">
                   <p className="text-xs text-gray-500 mb-1">Reason</p>
                   <p className="text-sm line-clamp-2">{excuse.reason}</p>
@@ -283,7 +355,7 @@ const Excuses = () => {
       {/* Excuse Detail Modal */}
       {selectedExcuse && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             {/* Header */}
             <div className="sticky top-0 bg-white p-6 pb-4 border-b border-gray-200 flex justify-between items-start">
               <div>
@@ -322,6 +394,10 @@ const Excuses = () => {
                     <div>
                       <p className="text-sm text-gray-500 mb-1">Absence Date</p>
                       <p>{formatDate(selectedExcuse.date)}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-500 mb-1">Class Schedule</p>
+                      <p>{selectedExcuse.formattedSchedule}</p>
                     </div>
                   </div>
                 </div>
