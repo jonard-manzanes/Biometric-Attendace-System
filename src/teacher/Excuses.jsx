@@ -264,9 +264,9 @@ const Excuses = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 md:p-6">
+    <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="bg-white rounded-lg shadow-sm p-4 md:p-6 mb-6">
+      <div className="bg-white rounded-lg shadow-sm px-4 mb-5">
         <h1 className="text-2xl font-bold text-gray-800 mb-1">Student Excuses</h1>
         <p className="text-gray-600">
           {filteredExcuses.length} {activeTab} excuse{filteredExcuses.length !== 1 ? "s" : ""}
