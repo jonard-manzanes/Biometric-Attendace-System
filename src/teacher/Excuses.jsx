@@ -1,6 +1,15 @@
 import React, { useEffect, useState } from "react";
 import { db } from "../firebaseConfig";
-import { collection, getDocs, doc, getDoc, updateDoc, query, where } from "firebase/firestore";
+import {
+  collection,
+  getDocs,
+  doc,
+  getDoc,
+  updateDoc,
+  query,
+  where,
+} from "firebase/firestore";
+import { eachDayOfInterval, format } from "date-fns";
 
 const Excuses = () => {
   const [excusesByClass, setExcusesByClass] = useState([]);
@@ -17,46 +26,43 @@ const Excuses = () => {
           ...doc.data(),
         }));
 
-        // Get dates for the past month
+        const excusesData = [];
         const today = new Date();
         const oneMonthAgo = new Date();
         oneMonthAgo.setMonth(today.getMonth() - 1);
-        
-        const excusesData = [];
+
+        // Generate all dates in the range
+        const dateRange = eachDayOfInterval({
+          start: oneMonthAgo,
+          end: today,
+        }).map((date) => format(date, "yyyy-MM-dd"));
 
         for (const cls of classes) {
           const classID = cls.joinCode || cls.subjectName.replace(/\s/g, "_");
-          const attendanceCol = collection(db, "attendance", classID);
-          const attendanceQuery = query(
-            attendanceCol,
-            where("date", ">=", oneMonthAgo.toISOString().split("T")[0]),
-            where("date", "<=", today.toISOString().split("T")[0])
-          );
-          
-          const attendanceSnap = await getDocs(attendanceQuery);
-
           const excuses = [];
-          for (const dateDoc of attendanceSnap.docs) {
-            const date = dateDoc.id;
-            const studentsCol = collection(db, "attendance", classID, date);
-            const studentsSnap = await getDocs(studentsCol);
 
-            for (const studentDoc of studentsSnap.docs) {
-              const data = studentDoc.data();
-              if (data.excuse && data.excuse.status !== "approved") {
-                const studentRef = doc(db, "users", studentDoc.id);
-                const studentInfo = await getDoc(studentRef);
-                excuses.push({
-                  studentId: studentDoc.id,
-                  studentName: studentInfo.exists()
-                    ? `${studentInfo.data().firstName} ${studentInfo.data().lastName}`
-                    : studentDoc.id,
-                  classID,
-                  date,
-                  attendanceDocId: studentDoc.id,
-                  ...data.excuse,
-                });
-              }
+          for (const date of dateRange) {
+            try {
+              const studentsCol = collection(db, "attendance", classID, date);
+              const studentsSnap = await getDocs(studentsCol);
+
+              studentsSnap.forEach((studentDoc) => {
+                const data = studentDoc.data();
+                if (data.excuse && data.excuse.status !== "approved") {
+                  const studentName = data.studentName || studentDoc.id; // Fallback to ID if name not available
+                  excuses.push({
+                    studentId: studentDoc.id,
+                    studentName,
+                    classID,
+                    date,
+                    attendanceDocId: studentDoc.id,
+                    ...data.excuse,
+                  });
+                }
+              });
+            } catch (error) {
+              console.error(`Error processing date ${date}:`, error);
+              continue;
             }
           }
 
@@ -64,7 +70,9 @@ const Excuses = () => {
             excusesData.push({
               className: cls.subjectName,
               classCode: classID,
-              excuses: excuses.sort((a, b) => new Date(b.date) - new Date(a.date)), // Sort by date descending
+              excuses: excuses.sort(
+                (a, b) => new Date(b.date) - new Date(a.date)
+              ),
             });
           }
         }
@@ -95,7 +103,7 @@ const Excuses = () => {
         attendanceStatus: action === "approve" ? "excuse" : "absent",
       });
       setSelectedExcuse(null);
-      
+
       // Refresh excuses
       const fetchExcuses = async () => {
         const classesSnap = await getDocs(collection(db, "classes"));
@@ -107,7 +115,7 @@ const Excuses = () => {
         const today = new Date();
         const oneMonthAgo = new Date();
         oneMonthAgo.setMonth(today.getMonth() - 1);
-        
+
         const excusesData = [];
 
         for (const cls of classes) {
@@ -118,7 +126,7 @@ const Excuses = () => {
             where("date", ">=", oneMonthAgo.toISOString().split("T")[0]),
             where("date", "<=", today.toISOString().split("T")[0])
           );
-          
+
           const attendanceSnap = await getDocs(attendanceQuery);
 
           const excuses = [];
@@ -150,7 +158,9 @@ const Excuses = () => {
             excusesData.push({
               className: cls.subjectName,
               classCode: classID,
-              excuses: excuses.sort((a, b) => new Date(b.date) - new Date(a.date)),
+              excuses: excuses.sort(
+                (a, b) => new Date(b.date) - new Date(a.date)
+              ),
             });
           }
         }
@@ -166,29 +176,29 @@ const Excuses = () => {
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'approved':
-        return 'text-green-600 bg-green-50 border-green-200';
-      case 'declined':
-        return 'text-red-600 bg-red-50 border-red-200';
+      case "approved":
+        return "text-green-600 bg-green-50 border-green-200";
+      case "declined":
+        return "text-red-600 bg-red-50 border-red-200";
       default:
-        return 'text-orange-600 bg-orange-50 border-orange-200';
+        return "text-orange-600 bg-orange-50 border-orange-200";
     }
   };
 
   const getStatusText = (status) => {
     switch (status) {
-      case 'approved':
-        return 'Approved';
-      case 'declined':
-        return 'Declined';
+      case "approved":
+        return "Approved";
+      case "declined":
+        return "Declined";
       default:
-        return 'Pending Review';
+        return "Pending Review";
     }
   };
 
   const formatDate = (dateString) => {
-    const options = { weekday: 'short', month: 'short', day: 'numeric' };
-    return new Date(dateString).toLocaleDateString('en-US', options);
+    const options = { weekday: "short", month: "short", day: "numeric" };
+    return new Date(dateString).toLocaleDateString("en-US", options);
   };
 
   if (loading) {
@@ -221,20 +231,26 @@ const Excuses = () => {
             📋
           </div>
           <h3 className="m-0 mb-2 text-gray-800">No excuses to review</h3>
-          <p className="m-0 text-gray-600">There are no pending student excuses from the past month.</p>
+          <p className="m-0 text-gray-600">
+            There are no pending student excuses from the past month.
+          </p>
         </div>
       )}
 
       {/* Excuses by Class */}
       {excusesByClass.map((cls) => (
-        <div key={cls.classCode} className="bg-white rounded-lg shadow-sm mb-6 overflow-hidden">
+        <div
+          key={cls.classCode}
+          className="bg-white rounded-lg shadow-sm mb-6 overflow-hidden"
+        >
           {/* Class Header */}
           <div className="p-5 border-b border-gray-100 bg-gray-50">
             <h2 className="m-0 mb-1 text-lg font-semibold text-gray-800">
               {cls.className}
             </h2>
             <p className="m-0 text-sm text-gray-600">
-              {cls.excuses.length} excuse{cls.excuses.length !== 1 ? 's' : ''} pending review
+              {cls.excuses.length} excuse{cls.excuses.length !== 1 ? "s" : ""}{" "}
+              pending review
             </p>
           </div>
 
@@ -243,8 +259,10 @@ const Excuses = () => {
             {cls.excuses.map((excuse, idx) => (
               <div
                 key={idx}
-                onClick={() => setSelectedExcuse({ ...excuse, className: cls.className })}
-                className={`px-6 py-4 ${idx < cls.excuses.length - 1 ? 'border-b border-gray-100' : ''} cursor-pointer transition-colors hover:bg-gray-50`}
+                onClick={() =>
+                  setSelectedExcuse({ ...excuse, className: cls.className })
+                }
+                className={`px-6 py-4 ${idx < cls.excuses.length - 1 ? "border-b border-gray-100" : ""} cursor-pointer transition-colors hover:bg-gray-50`}
               >
                 <div className="flex justify-between items-start gap-4">
                   <div className="flex-1">
@@ -269,7 +287,9 @@ const Excuses = () => {
                       </div>
                     )}
                   </div>
-                  <div className={`px-2 py-1 rounded border text-xs font-medium whitespace-nowrap ${getStatusColor(excuse.status)}`}>
+                  <div
+                    className={`px-2 py-1 rounded border text-xs font-medium whitespace-nowrap ${getStatusColor(excuse.status)}`}
+                  >
                     {getStatusText(excuse.status)}
                   </div>
                 </div>
@@ -303,22 +323,30 @@ const Excuses = () => {
             <div className="p-6">
               <div className="mb-4">
                 <div className="text-sm text-gray-600 mb-1">Student</div>
-                <div className="text-base font-medium text-gray-800">{selectedExcuse.studentName}</div>
+                <div className="text-base font-medium text-gray-800">
+                  {selectedExcuse.studentName}
+                </div>
               </div>
 
               <div className="mb-4">
                 <div className="text-sm text-gray-600 mb-1">Class</div>
-                <div className="text-base text-gray-800">{selectedExcuse.className}</div>
+                <div className="text-base text-gray-800">
+                  {selectedExcuse.className}
+                </div>
               </div>
 
               <div className="mb-4">
                 <div className="text-sm text-gray-600 mb-1">Reason</div>
-                <div className="text-base text-gray-800 leading-relaxed">{selectedExcuse.reason}</div>
+                <div className="text-base text-gray-800 leading-relaxed">
+                  {selectedExcuse.reason}
+                </div>
               </div>
 
               {selectedExcuse.image && (
                 <div className="mb-4">
-                  <div className="text-sm text-gray-600 mb-2">Proof Attached</div>
+                  <div className="text-sm text-gray-600 mb-2">
+                    Proof Attached
+                  </div>
                   <img
                     src={selectedExcuse.image}
                     alt="Proof"
@@ -329,30 +357,38 @@ const Excuses = () => {
 
               <div className="mb-6">
                 <div className="text-sm text-gray-600 mb-1">Status</div>
-                <div className={`inline-block px-2 py-1 rounded border text-sm font-medium ${getStatusColor(selectedExcuse.status)}`}>
+                <div
+                  className={`inline-block px-2 py-1 rounded border text-sm font-medium ${getStatusColor(selectedExcuse.status)}`}
+                >
                   {getStatusText(selectedExcuse.status)}
                 </div>
               </div>
 
               {/* Action Buttons */}
-              {selectedExcuse.status !== "approved" && selectedExcuse.status !== "declined" && (
-                <div className="flex gap-3 pt-4 border-t border-gray-100">
-                  <button
-                    onClick={() => handleExcuseAction(selectedExcuse, "approve")}
-                    className="flex-1 bg-green-600 text-white border-none py-3 px-4 rounded text-sm font-medium cursor-pointer hover:bg-green-700 transition-colors"
-                  >
-                    Approve Excuse
-                  </button>
-                  <button
-                    onClick={() => handleExcuseAction(selectedExcuse, "decline")}
-                    className="flex-1 bg-red-600 text-white border-none py-3 px-4 rounded text-sm font-medium cursor-pointer hover:bg-red-700 transition-colors"
-                  >
-                    Decline Excuse
-                  </button>
-                </div>
-              )}
+              {selectedExcuse.status !== "approved" &&
+                selectedExcuse.status !== "declined" && (
+                  <div className="flex gap-3 pt-4 border-t border-gray-100">
+                    <button
+                      onClick={() =>
+                        handleExcuseAction(selectedExcuse, "approve")
+                      }
+                      className="flex-1 bg-green-600 text-white border-none py-3 px-4 rounded text-sm font-medium cursor-pointer hover:bg-green-700 transition-colors"
+                    >
+                      Approve Excuse
+                    </button>
+                    <button
+                      onClick={() =>
+                        handleExcuseAction(selectedExcuse, "decline")
+                      }
+                      className="flex-1 bg-red-600 text-white border-none py-3 px-4 rounded text-sm font-medium cursor-pointer hover:bg-red-700 transition-colors"
+                    >
+                      Decline Excuse
+                    </button>
+                  </div>
+                )}
 
-              {(selectedExcuse.status === "approved" || selectedExcuse.status === "declined") && (
+              {(selectedExcuse.status === "approved" ||
+                selectedExcuse.status === "declined") && (
                 <div className="text-center p-4 bg-gray-50 rounded text-gray-600 text-sm">
                   This excuse has been {selectedExcuse.status}.
                 </div>
