@@ -708,7 +708,7 @@ const Attendance = () => {
   return (
     <div>
       {showFaceModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-white bg-opacity-75 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
             <h2 className="text-xl font-bold mb-4">Verify Your Identity</h2>
 
@@ -720,7 +720,7 @@ const Attendance = () => {
                 className="w-full h-auto rounded border border-gray-300"
               />
               {isVerifying && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50">
+                <div className="absolute inset-0 flex items-center justify-center bg-white bg-opacity-50">
                   <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-500"></div>
                 </div>
               )}
