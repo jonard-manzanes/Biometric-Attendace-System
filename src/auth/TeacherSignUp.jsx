@@ -25,7 +25,7 @@ const TeacherSignUp = () => {
   const [status, setStatus] = useState("Initializing camera...");
   const [isLoading, setIsLoading] = useState(false);
   const [loading, setLoading] = useState(true);
-  const role = "teacher";
+  const [role, setRole] = useState("teacher");
 
   useEffect(() => {
     const verifyAuthorization = async () => {
@@ -143,7 +143,7 @@ const TeacherSignUp = () => {
     e.preventDefault();
     setIsLoading(true);
 
-    if (!firstName.trim() || !lastName.trim() || !employeeId.trim() || !email.trim()) {
+    if (!firstName.trim() || !lastName.trim() || !employeeId.trim() || !email.trim() || !role) {
       Swal.fire({
         icon: "warning",
         title: "Missing Information",
@@ -195,6 +195,7 @@ const TeacherSignUp = () => {
           descriptor,
           image: snapshot,
           email,
+          role,
           updatedAt: serverTimestamp(),
         });
 
@@ -220,7 +221,7 @@ const TeacherSignUp = () => {
         await Swal.fire({
           icon: "success",
           title: "Registration Successful",
-          text: "You have been successfully registered as a teacher.",
+          text: `You have been successfully registered as a ${role}.`,
           confirmButtonColor: "#10b981",
         });
       }
@@ -255,6 +256,22 @@ const TeacherSignUp = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-900 to-emerald-700 flex items-center justify-center p-4 sm:p-6">
+      <style>{`
+        select {
+          -webkit-appearance: none;
+          -moz-appearance: none;
+          appearance: none;
+          background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='white'%3e%3cpath d='M7 10l5 5 5-5z'/%3e%3c/svg%3e");
+          background-repeat: no-repeat;
+          background-position: right 0.75rem center;
+          background-size: 1.5em;
+        }
+        select option {
+          background: #064e3b;
+          color: white;
+        }
+      `}</style>
+      
       <div className="w-full max-w-6xl bg-white/5 backdrop-blur-md rounded-2xl shadow-xl overflow-hidden">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-0">
           {/* Camera Preview */}
@@ -288,7 +305,7 @@ const TeacherSignUp = () => {
           {/* Registration Form */}
           <div className="bg-white/5 p-6 sm:p-8">
             <h1 className="text-2xl sm:text-3xl font-bold text-white text-center mb-6">
-              Teacher Registration
+              {role === 'teacher' ? 'Teacher' : 'Staff'} Registration
             </h1>
 
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -313,6 +330,19 @@ const TeacherSignUp = () => {
                     required
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-emerald-100 mb-1">Role*</label>
+                <select
+                  value={role}
+                  onChange={(e) => setRole(e.target.value)}
+                  className="w-full px-4 py-2 bg-emerald-900/80 border border-emerald-400/50 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  required
+                >
+                  <option value="teacher">Teacher</option>
+                  <option value="staff">Staff</option>
+                </select>
               </div>
 
               <div>
