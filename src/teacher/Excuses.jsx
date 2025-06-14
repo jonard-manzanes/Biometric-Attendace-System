@@ -5,6 +5,8 @@ import {
   getDocs,
   doc,
   updateDoc,
+  query,
+  where,
 } from "firebase/firestore";
 import { eachDayOfInterval, format } from "date-fns";
 
@@ -15,18 +17,43 @@ const Excuses = () => {
   const [selectedExcuse, setSelectedExcuse] = useState(null);
   const [activeTab, setActiveTab] = useState("pending");
 
+  const getUserId = () => {
+    const storedUserDocId = localStorage.getItem("userDocId");
+    if (storedUserDocId) return storedUserDocId;
+
+    const userString = localStorage.getItem("user");
+    if (userString) {
+      const user = JSON.parse(userString);
+      return user.docId || user.uid;
+    }
+
+    return null;
+  };
+
   useEffect(() => {
     const fetchExcuses = async () => {
       setLoading(true);
+      const teacherId = getUserId();
+      
+      if (!teacherId) {
+        console.error("No teacher ID found");
+        setLoading(false);
+        return;
+      }
+
       try {
-        // Fetch classes
-        const classesSnap = await getDocs(collection(db, "classes"));
+        // Fetch only classes that belong to this teacher
+        const classesQuery = query(
+          collection(db, "classes"),
+          where("teacherID", "==", teacherId)
+        );
+        const classesSnap = await getDocs(classesQuery);
         const classes = classesSnap.docs.map((doc) => ({
           id: doc.id,
           ...doc.data(),
         }));
 
-        // Fetch excuses
+        // Fetch excuses for the past month
         const today = new Date();
         const oneMonthAgo = new Date();
         oneMonthAgo.setMonth(today.getMonth() - 1);
@@ -258,7 +285,6 @@ const Excuses = () => {
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
             {/* Header */}
-
             <div className="sticky top-0 bg-white p-6 pb-4 border-b border-gray-200 flex justify-between items-start">
               <div>
                 <h2 className="text-xl font-bold text-gray-800">Excuse Details</h2>
