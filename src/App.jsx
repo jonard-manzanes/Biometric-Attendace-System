@@ -24,7 +24,11 @@ import ProofofClasses from "./admin/ClassesProof"
 import AccessCodes from "./admin/AccessCodes";
 import QuickAttendance from "./auth/quickAttendance";
 
-import Staff from "./staff/Staff_page";
+import Staff from "./staff/VerifyClasses";
+import StaffLayout from "./staff/StaffLayout";
+import VerifyClasses from "./staff/VerifyClasses";
+import StaffDSashboard from "./staff/Dashboard";
+import StaffProfile from "./staff/Profile";
 
 function App() {
   return (
@@ -84,10 +88,16 @@ function App() {
           path="/staff"
           element={
             <ProtectedRoute role="staff">
-              <Staff />
+              <StaffLayout />
             </ProtectedRoute>
           }
-        />
+        >
+        <Route path="dashboard" element={<StaffDSashboard />} />
+        <Route path="verify-classes" element={<VerifyClasses />} />
+        <Route path="profile" element={<StaffProfile />} />
+        </Route>
+        
+
       </Routes>
     </Router>
   );
