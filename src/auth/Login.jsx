@@ -58,63 +58,70 @@ const Login = () => {
     }
   };
 
-const handleSuccessfulLogin = (userData, fullName) => {
-  // Determine redirect path based on role
-  let redirectPath = "/dashboard";
-  if (userData.role === "admin") {  
-    redirectPath = "/admin/dashboard";
-  } else if (userData.role === "teacher") {
-    redirectPath = "/teacher/dashboard";
-  } else if (userData.role === "staff") {
-    redirectPath = "/staff/dashboard";
-  } else {
-    redirectPath = "/student/dashboard";
-  }
+  const handleSuccessfulLogin = (userData, fullName) => {
+    // Determine redirect path based on role
+    let redirectPath = "/dashboard";
+    switch (userData.role) {
+      case "admin":
+        redirectPath = "/admin/dashboard";
+        break;
+      case "teacher":
+        redirectPath = "/teacher/dashboard";
+        break;
+      case "staff":
+        redirectPath = "/staff/dashboard";
+        break;
+      case "departmentHead":
+        redirectPath = "/department/dashboard";
+        break;
+      default:
+        redirectPath = "/student/dashboard";
+    }
 
-  // Store user data
-  const userToStore = {
-    ...userData,
-    fullName,
-    id: userData.studentId || userData.email,
-    docId: userData.docId,
+    // Store user data
+    const userToStore = {
+      ...userData,
+      fullName,
+      id: userData.studentId || userData.email,
+      docId: userData.docId,
+    };
+
+    localStorage.setItem("user", JSON.stringify(userToStore));
+    localStorage.setItem("userDocId", userData.docId);
+    localStorage.setItem("currentUserId", userData.uid || userData.docId);
+    
+    // Store department information if available
+    if (userData.department) {
+      localStorage.setItem('department', userData.department);
+    }
+    
+    if (userData.role === "student" && userData.studentId) {
+      localStorage.setItem("studentId", userData.studentId);
+    }
+
+    // Create welcome message with role and department
+    let welcomeMessage = `Welcome, ${fullName}!`;
+    let roleMessage = `Role: ${userData.role.charAt(0).toUpperCase() + userData.role.slice(1)}`;
+    
+    if (userData.department) {
+      roleMessage += ` (${userData.department})`;
+    }
+
+    Swal.fire({
+      icon: "success",
+      title: welcomeMessage,
+      html: `<div class="text-center">
+               <p>${roleMessage}</p>
+               <p class="mt-2">You're being redirected to your dashboard</p>
+             </div>`,
+      timer: 2500,
+      showConfirmButton: false,
+      timerProgressBar: true,
+      didClose: () => {
+        window.location.href = redirectPath;
+      },
+    });
   };
-
-  localStorage.setItem("user", JSON.stringify(userToStore));
-  localStorage.setItem("userDocId", userData.docId);
-  localStorage.setItem("currentUserId", userData.uid || userData.docId);
-  
-  // Add these lines to store department information
-  if (userData.department) {
-    localStorage.setItem('studentDepartment', userData.department);
-  }
-  
-  if (userData.role === "student" && userData.studentId) {
-    localStorage.setItem("studentId", userData.studentId);
-  }
-
-  // Create welcome message with role and department (if student)
-  let welcomeMessage = `Welcome, ${fullName}!`;
-  let roleMessage = `Role: ${userData.role.charAt(0).toUpperCase() + userData.role.slice(1)}`;
-  
-  if (userData.role === "student" && userData.department) {
-    roleMessage += ` (${userData.department})`;
-  }
-
-  Swal.fire({
-    icon: "success",
-    title: welcomeMessage,
-    html: `<div class="text-center">
-             <p>${roleMessage}</p>
-             <p class="mt-2">You're being redirected to your dashboard</p>
-           </div>`,
-    timer: 2500,
-    showConfirmButton: false,
-    timerProgressBar: true,
-    didClose: () => {
-      window.location.href = redirectPath;
-    },
-  });
-};
 
   return (
     <div className="min-h-screen flex flex-col justify-center items-center gap-4 bg-gradient-to-br from-emerald-900 to-emerald-700 p-4">
@@ -161,6 +168,7 @@ const handleSuccessfulLogin = (userData, fullName) => {
               <option value="teacher">Teacher</option>
               <option value="staff">Staff</option>
               <option value="admin">Admin</option>
+              <option value="departmentHead">Department Head</option>
             </select>
           </div>
 

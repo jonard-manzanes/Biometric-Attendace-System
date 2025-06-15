@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from "react";
-import { Home, ClipboardCheck, User, LogOut, Menu } from "lucide-react";
+import { Home, Users, Calendar, FileText, LogOut, Menu } from "lucide-react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../firebaseConfig";
 import Swal from "sweetalert2";
 
-export default function StaffLayout() {
+export default function DepartmentLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [profileData, setProfileData] = useState(null);
@@ -63,7 +63,7 @@ export default function StaffLayout() {
   };
 
   const handleNavigate = (path) => {
-    navigate(`/Staff/${path}`);
+    navigate(`/department/${path}`);
     if (window.innerWidth < 768) setMobileSidebarOpen(false);
   };
 
@@ -87,10 +87,10 @@ export default function StaffLayout() {
   };
 
   const getUserInitials = () => {
-    if (!profileData) return 'T'; 
+    if (!profileData) return 'D'; 
     const firstInitial = profileData.firstName ? profileData.firstName.charAt(0) : '';
     const lastInitial = profileData.lastName ? profileData.lastName.charAt(0) : '';
-    return `${firstInitial}${lastInitial}`.toUpperCase() || 'T';
+    return `${firstInitial}${lastInitial}`.toUpperCase() || 'D';
   };
 
   return (
@@ -113,7 +113,7 @@ export default function StaffLayout() {
               <>
                 <div>
                   <h1 className="text-xl font-bold text-emerald-200">BIO-TRACK</h1>
-                  <p className="text-sm opacity-75">Biometric Attendance System</p>
+                  <p className="text-sm opacity-75">Department Portal</p>
                 </div>
                 <button onClick={toggleSidebar} className="text-white hover:text-emerald-200">
                   <Menu size={20} />
@@ -137,20 +137,19 @@ export default function StaffLayout() {
               onClick={() => handleNavigate("dashboard")}
               sidebarOpen={sidebarOpen}
             />
-            
             <SidebarLink
-              icon={<ClipboardCheck size={20} />}
-              text="Verify Classes"
-              active={currentPage === "verify-classes"}
-              onClick={() => handleNavigate("verify-classes")}
+              icon={<Users size={20} />}
+              text="Instructors"
+              active={currentPage === "instructors"}
+              onClick={() => handleNavigate("instructors")}
               sidebarOpen={sidebarOpen}
             />
             
             <SidebarLink
-              icon={<User size={20} />}
-              text="Profile"
-              active={currentPage === "profile"}
-              onClick={() => handleNavigate("profile")}
+              icon={<FileText size={20} />}
+              text="Reports"
+              active={currentPage === "reports"}
+              onClick={() => handleNavigate("reports")}
               sidebarOpen={sidebarOpen}
             />
           </div>

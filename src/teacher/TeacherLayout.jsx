@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Home, CalendarCheck, User, LogOut, Menu } from "lucide-react";
+import { Home, CalendarDays, Users, FileText, LogOut, Menu } from "lucide-react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../firebaseConfig";
@@ -138,7 +138,7 @@ export default function TeacherLayout() {
               sidebarOpen={sidebarOpen}
             />
             <SidebarLink
-              icon={<CalendarCheck size={20} />}
+              icon={<CalendarDays size={20} />}
               text="Classes"
               active={currentPage === "classes"}
               onClick={() => handleNavigate("classes")}
@@ -146,16 +146,15 @@ export default function TeacherLayout() {
             />
 
             <SidebarLink
-              icon={<CalendarCheck size={20} />}
+              icon={<Users size={20} />}
               text="Excused Absences"
               active={currentPage === "excused-absences"}
               onClick={() => handleNavigate("excused-absences")}
               sidebarOpen={sidebarOpen}
             />
 
-
             <SidebarLink
-              icon={<User size={20} />}
+              icon={<FileText size={20} />}
               text="Reports"
               active={currentPage === "reports"}
               onClick={() => handleNavigate("reports")}

@@ -25,11 +25,16 @@ import ProofofClasses from "./admin/ClassesProof"
 import AccessCodes from "./admin/AccessCodes";
 import QuickAttendance from "./auth/quickAttendance";
 
-import Staff from "./staff/VerifyClasses";
 import StaffLayout from "./staff/StaffLayout";
 import VerifyClasses from "./staff/VerifyClasses";
 import StaffDSashboard from "./staff/Dashboard";
 import StaffProfile from "./staff/Profile";
+
+
+import DepartmentLayout from "./departments/DepartmentLayout";
+import DepartmentDashboard from "./departments/Dashboard";
+import DepartmentInstrutor from "./departments/Instructors";
+import DepartmentReports from "./departments/Reports";
 
 
 function App() {
@@ -99,9 +104,27 @@ function App() {
         <Route path="verify-classes" element={<VerifyClasses />} />
         <Route path="profile" element={<StaffProfile />} />
         </Route>
+
+
+        <Route
+          path="/department"
+          element={
+            <ProtectedRoute role="departmentHead">
+              <DepartmentLayout />
+            </ProtectedRoute>
+          }
+        >
+          <Route path="dashboard" element={<DepartmentDashboard />} />
+          <Route path="instructors" element={<DepartmentInstrutor />} />
+          <Route path="reports" element={<DepartmentReports />} />
+        </Route>
         
 
       </Routes>
+
+
+
+
     </Router>
   );
 }

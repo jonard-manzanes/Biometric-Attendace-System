@@ -125,7 +125,7 @@ const TeacherSignUp = () => {
   }, [loading]);
 
   const validateEmail = (email) => {
-    const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const re = /^[^\s@]+@evsu\.edu\.ph$/;
     return re.test(email);
   };
 
@@ -186,7 +186,7 @@ const TeacherSignUp = () => {
       Swal.fire({
         icon: "error",
         title: "Invalid Email",
-        text: "Please enter a valid email address.",
+        text: "Please enter a valid EVSU email address (ending with @evsu.edu.ph).",
         confirmButtonColor: "#10b981",
       });
       setIsLoading(false);
@@ -399,7 +399,9 @@ const TeacherSignUp = () => {
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full px-4 py-2 bg-white/10 border border-emerald-400/50 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                   required
+                  placeholder="user@evsu.edu.ph"
                 />
+                <p className="text-emerald-300 text-xs mt-1">Only @evsu.edu.ph emails are accepted</p>
               </div>
 
               {/* Course and Department fields */}

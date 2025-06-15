@@ -87,6 +87,12 @@ const SignUp = () => {
     };
   }, []);
 
+  // Validate email to only accept @evsu.edu.ph addresses
+  const validateEmail = (email) => {
+    const re = /^[^\s@]+@evsu\.edu\.ph$/;
+    return re.test(email);
+  };
+
   const changeDirection = () => {
     directionIndexRef.current =
       (directionIndexRef.current + 1) % directions.length;
@@ -123,15 +129,14 @@ const SignUp = () => {
 
       const verificationLink = `${window.location.origin}/verify-email?token=${verificationToken}&userId=${userId}`;
 
-      // Updated to match template variables exactly
       const response = await emailjs.send(
         "service_h073o6m",
         "template_hoohcer",
         {
-          link: verificationLink, // Must match {{link}} in template
-          email: email, // Must match {{email}} in template
-          websiteUrl: "https://biometric-attendace-system.vercel.app/", // For logo link
-          companyName: "University Attendance System", // For footer
+          link: verificationLink,
+          email: email,
+          websiteUrl: "https://biometric-attendace-system.vercel.app/",
+          companyName: "University Attendance System",
         }
       );
 
@@ -182,6 +187,18 @@ const SignUp = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsLoading(true);
+
+    // Validate email format before proceeding
+    if (!validateEmail(formData.email)) {
+      Swal.fire({
+        icon: "error",
+        title: "Invalid Email",
+        text: "Please use your official EVSU email address (ending with @evsu.edu.ph)",
+        confirmButtonColor: "#10b981",
+      });
+      setIsLoading(false);
+      return;
+    }
 
     try {
       // First complete face registration
@@ -465,7 +482,9 @@ const SignUp = () => {
                   onChange={handleChange}
                   className="w-full px-4 py-2 bg-white/10 border border-emerald-400/50 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   required
+                  placeholder="username@evsu.edu.ph"
                 />
+                <p className="text-emerald-300 text-xs mt-1">Only @evsu.edu.ph emails are accepted</p>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -549,7 +568,6 @@ const SignUp = () => {
                 )}
               </button>
 
-              {/* Added login and teacher registration links */}
               <div className="flex flex-col sm:flex-row justify-between items-center pt-4 border-t border-emerald-800/50">
                 <a 
                   href="/login" 
