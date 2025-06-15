@@ -26,6 +26,27 @@ const TeacherSignUp = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [role, setRole] = useState("teacher");
+  const [course, setCourse] = useState("");
+  const [department, setDepartment] = useState("");
+
+  // Sample data for courses and departments
+  const courses = [
+    "Computer Science",
+    "Electrical Engineering",
+    "Mechanical Engineering",
+  ];
+  const departments = ["Engineering", "Science", "Business"];
+
+  // Generate employee ID in format: JManzanes61525 (FirstLetterName + FullLastName + MMDDYY)
+  const generateEmployeeId = (firstName, lastName) => {
+    const now = new Date();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const year = String(now.getFullYear()).slice(-2); // Last two digits of year
+    const firstLetter = firstName.charAt(0).toUpperCase();
+    const lastNamePart = lastName.charAt(0).toUpperCase() + lastName.slice(1).toLowerCase();
+    return `${firstLetter}${lastNamePart}${month}${day}${year}`;
+  };
 
   useEffect(() => {
     const verifyAuthorization = async () => {
@@ -50,6 +71,13 @@ const TeacherSignUp = () => {
 
     verifyAuthorization();
   }, [navigate]);
+
+  // Update employeeId whenever firstName or lastName changes
+  useEffect(() => {
+    if (firstName && lastName) {
+      setEmployeeId(generateEmployeeId(firstName, lastName));
+    }
+  }, [firstName, lastName]);
 
   useEffect(() => {
     if (loading) return;
@@ -196,6 +224,8 @@ const TeacherSignUp = () => {
           image: snapshot,
           email,
           role,
+          course,
+          department,
           updatedAt: serverTimestamp(),
         });
 
@@ -212,6 +242,8 @@ const TeacherSignUp = () => {
           studentId: employeeId,
           email,
           role,
+          course,
+          department,
           descriptor,
           image: snapshot,
           fullName: `${firstName} ${lastName}`,
@@ -231,6 +263,8 @@ const TeacherSignUp = () => {
       setLastName("");
       setEmployeeId("");
       setEmail("");
+      setCourse("");
+      setDepartment("");
       navigate("/login");
     } catch (error) {
       console.error(error);
@@ -346,14 +380,15 @@ const TeacherSignUp = () => {
               </div>
 
               <div>
-                <label className="block text-emerald-100 mb-1">Employee ID*</label>
+                <label className="block text-emerald-100 mb-1">Instructor ID*</label>
                 <input
                   type="text"
                   value={employeeId}
-                  onChange={(e) => setEmployeeId(e.target.value)}
-                  className="w-full px-4 py-2 bg-white/10 border border-emerald-400/50 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  readOnly
+                  className="w-full px-4 py-2 bg-emerald-900/50 border border-emerald-400/50 rounded-lg text-emerald-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent cursor-not-allowed"
                   required
                 />
+                <p className="text-emerald-300 text-xs mt-1">Auto-generated ID (Format: FirstLetterLastName + FullLastName + MMDDYY)</p>
               </div>
 
               <div>
@@ -365,6 +400,38 @@ const TeacherSignUp = () => {
                   className="w-full px-4 py-2 bg-white/10 border border-emerald-400/50 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                   required
                 />
+              </div>
+
+              {/* Course and Department fields */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-emerald-100 mb-1">Course*</label>
+                  <select
+                    value={course}
+                    onChange={(e) => setCourse(e.target.value)}
+                    className="w-full px-4 py-2 bg-emerald-900/80 border border-emerald-400/50 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    required
+                  >
+                    <option value="">Select Course</option>
+                    {courses.map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-emerald-100 mb-1">Department*</label>
+                  <select
+                    value={department}
+                    onChange={(e) => setDepartment(e.target.value)}
+                    className="w-full px-4 py-2 bg-emerald-900/80 border border-emerald-400/50 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    required
+                  >
+                    <option value="">Select Department</option>
+                    {departments.map((d) => (
+                      <option key={d} value={d}>{d}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
               <div className="bg-emerald-900/30 p-3 rounded-lg">
