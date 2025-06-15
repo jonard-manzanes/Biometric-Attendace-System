@@ -1,6 +1,7 @@
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import Login from "./auth/Login";
 import SignUp from "./auth/SignUp";
+import VerifyEmail from "./auth/VerifyEmail";
 import TeacherSignUp from "./auth/TeacherSignUp";
 import ProtectedRoute from "./auth/ProtectedRoute";
 
@@ -30,6 +31,7 @@ import VerifyClasses from "./staff/VerifyClasses";
 import StaffDSashboard from "./staff/Dashboard";
 import StaffProfile from "./staff/Profile";
 
+
 function App() {
   return (
     <Router>
@@ -39,6 +41,7 @@ function App() {
         <Route path="/signup" element={<SignUp />} />
         <Route path="/teacher-signup" element={<TeacherSignUp />} />
         <Route path="/quick-attendance" element={<QuickAttendance />} />
+        <Route path="/verify-email" element={<VerifyEmail />} />
 
         <Route
           path="/student"

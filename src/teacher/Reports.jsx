@@ -10,7 +10,7 @@ import {
   addDoc,
   deleteDoc,
 } from "firebase/firestore";
-import { format, parseISO, eachDayOfInterval, isMatch, parse } from "date-fns";
+import { format, parseISO, eachDayOfInterval, parse } from "date-fns";
 import { Bar } from "react-chartjs-2";
 import {
   Chart as ChartJS,
@@ -49,6 +49,7 @@ const Reports = () => {
     description: "",
   });
   const [showHolidayForm, setShowHolidayForm] = useState(false);
+  const [teacherAttendanceRecords, setTeacherAttendanceRecords] = useState({});
 
   // Get current teacher ID
   const getTeacherId = () => {
@@ -128,6 +129,49 @@ const Reports = () => {
       }
     }
   }, [selectedClass, classes]);
+
+  // Fetch teacher attendance records when class or date range changes
+  useEffect(() => {
+    if (!selectedClass) return;
+
+    const fetchTeacherAttendance = async () => {
+      try {
+        const teacherId = getTeacherId();
+        if (!teacherId) return;
+
+        const startDate = parseISO(dateRange.start);
+        const endDate = parseISO(dateRange.end);
+        const allDates = eachDayOfInterval({
+          start: startDate,
+          end: endDate,
+        }).map((date) => format(date, "yyyy-MM-dd"));
+
+        const records = {};
+        
+        // Check teacher attendance for each date
+        for (const date of allDates) {
+          const attendanceRef = doc(db, "teacherAttendance", selectedClass, date, teacherId);
+          const attendanceSnap = await getDoc(attendanceRef);
+          
+          if (attendanceSnap.exists()) {
+            const data = attendanceSnap.data();
+            records[date] = {
+              timeIn: data.timeIn,
+              timeOut: data.timeOut
+            };
+          } else {
+            records[date] = null;
+          }
+        }
+
+        setTeacherAttendanceRecords(records);
+      } catch (err) {
+        console.error("Error fetching teacher attendance:", err);
+      }
+    };
+
+    fetchTeacherAttendance();
+  }, [selectedClass, dateRange]);
 
   // Filter dates based on class schedule days and exclude holidays
   const filterDatesBySchedule = (dates) => {
@@ -223,6 +267,10 @@ const Reports = () => {
             const records = await Promise.all(
               dateArray.map(async (date) => {
                 try {
+                  // Check if teacher attended this class on this date
+                  const teacherAttended = teacherAttendanceRecords[date] && 
+                    (teacherAttendanceRecords[date].timeIn || teacherAttendanceRecords[date].timeOut);
+
                   const attendanceRef = doc(
                     db,
                     "attendance",
@@ -231,7 +279,8 @@ const Reports = () => {
                     studentId
                   );
                   const attendanceSnap = await getDoc(attendanceRef);
-                  if (attendanceSnap.exists()) {
+                  
+                  if (attendanceSnap.exists() && teacherAttended) {
                     const data = attendanceSnap.data() || {};
                     let timeIn = data.timeIn
                       ? typeof data.timeIn.toDate === "function"
@@ -289,6 +338,7 @@ const Reports = () => {
                       excuse: excuseInfo,
                       isValidTimeIn: validTimeIn,
                       isValidTimeOut: validTimeOut,
+                      teacherAttended: true
                     };
                   }
                 } catch (err) {
@@ -299,10 +349,11 @@ const Reports = () => {
                   timeIn: null,
                   timeOut: null,
                   verificationMethod: null,
-                  status: "Absent",
+                  status: teacherAttendanceRecords[date] ? "No Class (Teacher Absent)" : "Absent",
                   excuse: null,
                   isValidTimeIn: false,
                   isValidTimeOut: false,
+                  teacherAttended: !!teacherAttendanceRecords[date]
                 };
               })
             );
@@ -329,7 +380,7 @@ const Reports = () => {
     };
 
     fetchAttendanceData();
-  }, [selectedClass, dateRange, classSchedule, holidays]);
+  }, [selectedClass, dateRange, classSchedule, holidays, teacherAttendanceRecords]);
 
   const handleDateChange = (e) => {
     setDateRange({
@@ -457,31 +508,37 @@ const Reports = () => {
     const presentCounts = dates.map((date) =>
       attendanceData.reduce((sum, student) => {
         const record = student.records.find((r) => r.date === date);
-        return sum + (record && record.status === "Present" ? 1 : 0);
+        return sum + (record && record.status === "Present" && record.teacherAttended ? 1 : 0);
       }, 0)
     );
     const timeInOnlyCounts = dates.map((date) =>
       attendanceData.reduce((sum, student) => {
         const record = student.records.find((r) => r.date === date);
-        return sum + (record && record.status === "Time In Only" ? 1 : 0);
+        return sum + (record && record.status === "Time In Only" && record.teacherAttended ? 1 : 0);
       }, 0)
     );
     const excusedCounts = dates.map((date) =>
       attendanceData.reduce((sum, student) => {
         const record = student.records.find((r) => r.date === date);
-        return sum + (record && record.status === "Excused Absence" ? 1 : 0);
+        return sum + (record && record.status === "Excused Absence" && record.teacherAttended ? 1 : 0);
       }, 0)
     );
     const pendingExcuseCounts = dates.map((date) =>
       attendanceData.reduce((sum, student) => {
         const record = student.records.find((r) => r.date === date);
-        return sum + (record && record.status === "Pending Excuse" ? 1 : 0);
+        return sum + (record && record.status === "Pending Excuse" && record.teacherAttended ? 1 : 0);
       }, 0)
     );
     const absentCounts = dates.map((date) =>
       attendanceData.reduce((sum, student) => {
         const record = student.records.find((r) => r.date === date);
-        return sum + (record && record.status === "Absent" ? 1 : 0);
+        return sum + (record && record.status === "Absent" && record.teacherAttended ? 1 : 0);
+      }, 0)
+    );
+    const noClassCounts = dates.map((date) =>
+      attendanceData.reduce((sum, student) => {
+        const record = student.records.find((r) => r.date === date);
+        return sum + (record && !record.teacherAttended ? 1 : 0);
       }, 0)
     );
 
@@ -513,6 +570,11 @@ const Reports = () => {
           data: absentCounts,
           backgroundColor: "red",
         },
+        {
+          label: "No Class (Teacher Absent)",
+          data: noClassCounts,
+          backgroundColor: "gray",
+        },
       ],
     };
   }, [attendanceData]);
@@ -530,29 +592,31 @@ const Reports = () => {
         return "bg-orange-100 text-orange-800";
       case "Absent":
         return "bg-red-100 text-red-800";
+      case "No Class (Teacher Absent)":
+        return "bg-gray-100 text-gray-800";
       default:
         return "bg-gray-100 text-gray-800";
     }
   };
 
   return (
-    <div>
-      <h1 className="text-2xl font-bold mb-2">Attendance Reports</h1>
+    <div className="p-4">
+      <h1 className="text-2xl font-bold mb-6">Attendance Reports</h1>
       {error && (
-        <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-4">
+        <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-6 rounded">
           <p>{error}</p>
         </div>
       )}
 
       {/* Filters */}
-      <div className="bg-white p-4 rounded-lg shadow mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="bg-white p-6 rounded-lg shadow-md mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
               Class
             </label>
             <select
-              className="w-full p-2 border border-gray-300 rounded"
+              className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-emerald-500 focus:border-emerald-500"
               value={selectedClass || ""}
               onChange={(e) => setSelectedClass(e.target.value)}
             >
@@ -565,7 +629,7 @@ const Reports = () => {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
               Start Date
             </label>
             <input
@@ -573,12 +637,12 @@ const Reports = () => {
               name="start"
               value={dateRange.start}
               onChange={handleDateChange}
-              className="w-full p-2 border border-gray-300 rounded"
+              className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-emerald-500 focus:border-emerald-500"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
               End Date
             </label>
             <input
@@ -586,20 +650,20 @@ const Reports = () => {
               name="end"
               value={dateRange.end}
               onChange={handleDateChange}
-              className="w-full p-2 border border-gray-300 rounded"
+              className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-emerald-500 focus:border-emerald-500"
             />
           </div>
         </div>
 
         {/* Class schedule display */}
         {classSchedule && classSchedule.length > 0 && (
-          <div className="mt-4">
-            <p className="text-sm font-medium text-gray-700">Class Schedule:</p>
-            <div className="flex flex-wrap gap-2 mt-1">
+          <div className="mt-6">
+            <p className="text-sm font-medium text-gray-700 mb-2">Class Schedule:</p>
+            <div className="flex flex-wrap gap-2">
               {classSchedule.map((session, index) => (
                 <span
                   key={index}
-                  className="bg-gray-100 px-2 py-1 rounded text-sm"
+                  className="bg-gray-100 px-3 py-1 rounded-md text-sm"
                 >
                   {session.day} {session.start}-{session.end}
                 </span>
@@ -609,20 +673,29 @@ const Reports = () => {
         )}
 
         {/* Holidays management */}
-        <div className="mt-4">
-          <div className="flex justify-between items-center">
+        <div className="mt-6">
+          <div className="flex justify-between items-center mb-2">
             <p className="text-sm font-medium text-gray-700">Holidays/No Class Days:</p>
             <button
               onClick={() => setShowHolidayForm(!showHolidayForm)}
-              className="text-emerald-600 hover:text-emerald-800 text-sm font-medium"
+              className="text-emerald-600 hover:text-emerald-800 text-sm font-medium flex items-center"
             >
-              {showHolidayForm ? "Cancel" : "+ Add Holiday"}
+              {showHolidayForm ? (
+                <>
+                  <span className="mr-1">Cancel</span>
+                </>
+              ) : (
+                <>
+                  <span className="mr-1">+</span>
+                  <span>Add Holiday</span>
+                </>
+              )}
             </button>
           </div>
           
           {showHolidayForm && (
-            <div className="mt-2 p-3 bg-gray-50 rounded-lg">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="mt-2 p-4 bg-gray-50 rounded-lg">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Date
@@ -631,7 +704,7 @@ const Reports = () => {
                     type="date"
                     value={newHoliday.date}
                     onChange={(e) => setNewHoliday({...newHoliday, date: e.target.value})}
-                    className="w-full p-2 border border-gray-300 rounded text-sm"
+                    className="w-full p-2 border border-gray-300 rounded-md text-sm focus:ring-emerald-500 focus:border-emerald-500"
                   />
                 </div>
                 <div className="md:col-span-2">
@@ -643,12 +716,12 @@ const Reports = () => {
                       type="text"
                       value={newHoliday.description}
                       onChange={(e) => setNewHoliday({...newHoliday, description: e.target.value})}
-                      className="flex-1 p-2 border border-gray-300 rounded text-sm"
+                      className="flex-1 p-2 border border-gray-300 rounded-md text-sm focus:ring-emerald-500 focus:border-emerald-500"
                       placeholder="E.g., Thanksgiving Break"
                     />
                     <button
                       onClick={addHoliday}
-                      className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2 px-4 rounded text-sm"
+                      className="bg-emerald-500 hover:bg-emerald-600 text-white font-medium py-2 px-4 rounded-md text-sm transition-colors"
                     >
                       Add
                     </button>
@@ -659,9 +732,9 @@ const Reports = () => {
           )}
 
           {holidays.length > 0 && (
-            <div className="mt-2">
+            <div className="mt-4 space-y-2">
               {holidays.map((holiday) => (
-                <div key={holiday.id} className="flex justify-between items-center bg-gray-100 p-2 rounded mb-1">
+                <div key={holiday.id} className="flex justify-between items-center bg-gray-100 p-3 rounded-md">
                   <div>
                     <span className="font-medium text-sm">{holiday.date}</span>
                     {holiday.description && (
@@ -681,10 +754,10 @@ const Reports = () => {
         </div>
 
         {/* Download button */}
-        <div className="mt-4 flex justify-end">
+        <div className="mt-6 flex justify-end">
           <button
             onClick={downloadAttendanceReport}
-            className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2 px-4 rounded"
+            className="bg-emerald-500 hover:bg-emerald-600 text-white font-medium py-2 px-6 rounded-md transition-colors disabled:bg-gray-400"
             disabled={loading || !selectedClass || attendanceData.length === 0}
           >
             Download Attendance Report
@@ -692,14 +765,16 @@ const Reports = () => {
         </div>
       </div>
 
-      {/* Attendance Table */}
+      {/* Loading indicator */}
       {loading ? (
         <div className="flex justify-center items-center h-64">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-500"></div>
         </div>
       ) : (
-        <div className="bg-white rounded-lg shadow overflow-hidden">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+        /* Attendance Table and Chart */
+        <div className="bg-white rounded-lg shadow-md overflow-hidden">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 p-6">
+            {/* Attendance Table */}
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
@@ -711,9 +786,12 @@ const Reports = () => {
                       attendanceData[0].records.map((record) => (
                         <th
                           key={record.date}
-                          className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                          className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap"
                         >
-                          {format(parseISO(record.date), "MMM d (EEEE)")}
+                          {format(parseISO(record.date), "MMM d")}
+                          <div className="text-xs font-normal">
+                            {format(parseISO(record.date), "EEEE")}
+                          </div>
                         </th>
                       ))}
                   </tr>
@@ -725,7 +803,7 @@ const Reports = () => {
                         <div className="text-sm font-medium text-gray-900">
                           {student.studentName}
                         </div>
-                        <div className="text-sm text-gray-500">
+                        <div className="text-xs text-gray-500">
                           {student.studentId}
                         </div>
                       </td>
@@ -733,7 +811,7 @@ const Reports = () => {
                       {student.records.map((record) => (
                         <td
                           key={`${student.studentId}-${record.date}`}
-                          className="px-4 py-2"
+                          className="px-4 py-3"
                         >
                           <div className="flex flex-col items-center">
                             <span
@@ -746,7 +824,7 @@ const Reports = () => {
 
                             {record.timeIn && (
                               <span
-                                className={`text-xs ${
+                                className={`text-xs mt-1 ${
                                   record.isValidTimeIn
                                     ? "text-gray-500"
                                     : "text-red-500"
@@ -790,19 +868,52 @@ const Reports = () => {
                 </tbody>
               </table>
             </div>
+
             {/* Attendance Summary Chart */}
             {aggregatedData && (
-              <div className="mt-8">
+              <div className="mt-6 lg:mt-0">
                 <h2 className="text-xl font-bold mb-4">
                   Attendance Summary Chart
                 </h2>
-                <Bar
-                  data={aggregatedData}
-                  options={{
-                    responsive: true,
-                    plugins: { legend: { position: "top" } },
-                  }}
-                />
+                <div className="bg-white p-4 rounded-lg shadow">
+                  <Bar
+                    data={aggregatedData}
+                    options={{
+                      responsive: true,
+                      plugins: { 
+                        legend: { 
+                          position: "top",
+                          labels: {
+                            boxWidth: 12,
+                            padding: 20
+                          }
+                        },
+                        title: {
+                          display: true,
+                          text: 'Attendance Distribution',
+                          font: {
+                            size: 16
+                          }
+                        }
+                      },
+                      scales: {
+                        x: {
+                          stacked: true,
+                        },
+                        y: {
+                          stacked: true,
+                          beginAtZero: true,
+                          max: attendanceData.length,
+                          ticks: {
+                            stepSize: 1
+                          }
+                        }
+                      },
+                      maintainAspectRatio: false
+                    }}
+                    height={400}
+                  />
+                </div>
               </div>
             )}
           </div>

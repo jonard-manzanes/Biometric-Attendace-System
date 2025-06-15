@@ -2,30 +2,24 @@ import React, { useEffect, useRef, useState } from "react";
 import * as faceapi from "face-api.js";
 import Swal from "sweetalert2";
 import { db } from "../firebaseConfig";
-import {
-  collection,
-  addDoc,
-  query,
-  where,
-  getDocs,
-  updateDoc,
-  doc,
-  serverTimestamp,
-} from "firebase/firestore";
+import { collection, addDoc, query, where, getDocs, updateDoc, doc, serverTimestamp } from "firebase/firestore";
 import emailjs from '@emailjs/browser';
+import { v4 as uuidv4 } from 'uuid';
 
 // Initialize EmailJS with your Public Key
-emailjs.init('yQ8skMDEGxmHl4fgX');
+emailjs.init('iZA0kY1GD5ZucGLE8');
 
 const SignUp = () => {
   const videoRef = useRef();
   const canvasRef = useRef();
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
-  const [studentId, setStudentId] = useState("");
-  const [email, setEmail] = useState("");
-  const [course, setCourse] = useState("");
-  const [department, setDepartment] = useState("");
+  const [formData, setFormData] = useState({
+    firstName: "",
+    lastName: "",
+    studentId: "",
+    email: "",
+    course: "",
+    department: ""
+  });
   const [status, setStatus] = useState("Initializing camera...");
   const [isLoading, setIsLoading] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
@@ -34,27 +28,8 @@ const SignUp = () => {
   const directionIndexRef = useRef(0);
   const role = "student";
 
-  // Sample list of courses and departments
-  const courses = [
-    "Computer Science",
-    "Electrical Engineering",
-    "Mechanical Engineering",
-    "Civil Engineering",
-    "Business Administration",
-    "Medicine",
-    "Law",
-    "Architecture"
-  ];
-
-  const departments = [
-    "Engineering",
-    "Science",
-    "Medicine",
-    "Law",
-    "Business",
-    "Arts",
-    "Social Sciences"
-  ];
+  const courses = ["Computer Science", "Electrical Engineering", "Mechanical Engineering"];
+  const departments = ["Engineering", "Science", "Business"];
 
   useEffect(() => {
     const initModelsAndVideo = async () => {
@@ -67,9 +42,7 @@ const SignUp = () => {
         ]);
 
         setStatus("Accessing camera...");
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "user" },
-        });
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
         videoRef.current.srcObject = stream;
         setStatus("Ready for registration");
       } catch (error) {
@@ -98,9 +71,7 @@ const SignUp = () => {
     setCurrentDirection(directions[directionIndexRef.current]);
     
     if (directionIndexRef.current === directions.length - 1) {
-      setTimeout(() => {
-        setCurrentDirection("center");
-      }, 2000);
+      setTimeout(() => setCurrentDirection("center"), 2000);
     }
   };
 
@@ -108,7 +79,6 @@ const SignUp = () => {
     setIsScanning(true);
     setStatus("Please follow the head movement instructions");
     const interval = setInterval(changeDirection, 2000);
-    
     return () => {
       clearInterval(interval);
       setIsScanning(false);
@@ -116,54 +86,52 @@ const SignUp = () => {
     };
   };
 
-  const sendSuccessEmail = async (email, firstName) => {
+  const generateVerificationToken = () => uuidv4();
+
+  const sendVerificationEmail = async (email, firstName, userId) => {
     try {
-      const response = await emailjs.send(
-        'service_uh90vsr', // Your EmailJS Service ID
-        'template_zfw25qd', // Your EmailJS Template ID
-        {
-          name: firstName,
-          email: email,
-          studentId: studentId,
-          date: new Date().toLocaleDateString()
-        }
-      );
-      
-      console.log('Email sent successfully:', {
-        status: response.status,
-        text: response.text,
-        email: email
+      const verificationToken = generateVerificationToken();
+      const verificationDoc = {
+        userId,
+        token: verificationToken,
+        createdAt: serverTimestamp(),
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours from now
+      };
+      await addDoc(collection(db, "verificationTokens"), verificationDoc);
+
+      const verificationLink = `${window.location.origin}/verify-email?token=${verificationToken}&userId=${userId}`;
+
+      // Updated to match template variables exactly
+      const response = await emailjs.send('service_h073o6m', 'template_hoohcer', {
+        link: verificationLink,  // Must match {{link}} in template
+        email: email,           // Must match {{email}} in template
+        websiteUrl: "https://your-university.edu",  // For logo link
+        companyName: "University Attendance System" // For footer
       });
       
+      console.log('Email sent successfully:', response);
       return true;
     } catch (error) {
-      console.error('Failed to send email:', {
+      console.error('Failed to send verification email:', {
         code: error.code,
         message: error.message,
-        text: error.text,
-        response: error.response
+        text: error.text
       });
       return false;
     }
   };
 
   const captureSnapshot = () => {
-    const video = videoRef.current;
     const canvas = canvasRef.current;
     const context = canvas.getContext("2d");
-
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    context.drawImage(video, 0, 0, canvas.width, canvas.height);
-
+    canvas.width = videoRef.current.videoWidth;
+    canvas.height = videoRef.current.videoHeight;
+    context.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
     return canvas.toDataURL("image/jpeg");
   };
 
   const checkIfStudentExists = async (studentId) => {
-    const q = query(
-      collection(db, "users"),
-      where("studentId", "==", studentId)
-    );
+    const q = query(collection(db, "users"), where("studentId", "==", studentId));
     const querySnapshot = await getDocs(q);
     return querySnapshot.empty ? null : querySnapshot.docs[0];
   };
@@ -173,11 +141,8 @@ const SignUp = () => {
     const querySnapshot = await getDocs(q);
 
     for (const doc of querySnapshot.docs) {
-      const existingDescriptor = doc.data().descriptor;
-      const distance = faceapi.euclideanDistance(descriptor, existingDescriptor);
-      if (distance < 0.3) {
-        return true;
-      }
+      const distance = faceapi.euclideanDistance(descriptor, doc.data().descriptor);
+      if (distance < 0.3) return true;
     }
     return false;
   };
@@ -185,27 +150,6 @@ const SignUp = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsLoading(true);
-
-    if (!firstName.trim() || !lastName.trim() || !studentId.trim() || !email.trim() || !course.trim() || !department.trim()) {
-      Swal.fire({
-        icon: "warning",
-        title: "Missing Information",
-        text: "Please fill in all the required fields.",
-        confirmButtonColor: "#10b981",
-      });
-      setIsLoading(false);
-      return;
-    }
-
-    // Test email sending before face registration (for debugging)
-    try {
-      const emailTest = await sendSuccessEmail(email, firstName);
-      if (!emailTest) {
-        throw new Error("Email service test failed");
-      }
-    } catch (error) {
-      console.error("Email test failed:", error);
-    }
 
     try {
       // First complete face registration
@@ -219,78 +163,73 @@ const SignUp = () => {
 
       stopScanning();
 
-      if (!detection) {
-        throw new Error("No face detected. Please ensure your face is visible and well-lit.");
-      }
+      if (!detection) throw new Error("No face detected. Please ensure your face is visible and well-lit.");
 
       const descriptor = Array.from(detection.descriptor);
-      const faceExists = await checkIfFaceExists(descriptor);
-      if (faceExists) {
+      if (await checkIfFaceExists(descriptor)) {
         throw new Error("This face has already been registered in our system.");
       }
 
       const snapshot = captureSnapshot();
-      const existingStudentDoc = await checkIfStudentExists(studentId);
+      const existingStudentDoc = await checkIfStudentExists(formData.studentId);
+      let userId;
 
       if (existingStudentDoc) {
-        const existingStudent = existingStudentDoc.data();
-        if (existingStudent.descriptor?.length > 0) {
+        if (existingStudentDoc.data().descriptor?.length > 0) {
           throw new Error("This student ID is already registered with a face.");
         }
-
-        await updateDoc(doc(db, "users", existingStudentDoc.id), {
+        userId = existingStudentDoc.id;
+        await updateDoc(doc(db, "users", userId), {
           descriptor,
           image: snapshot,
-          email,
-          course,
-          department,
+          ...formData,
+          verified: false,
           updatedAt: serverTimestamp(),
         });
       } else {
-        await addDoc(collection(db, "users"), {
-          firstName,
-          lastName,
-          studentId,
-          email,
+        const newUserRef = await addDoc(collection(db, "users"), {
+          ...formData,
           role,
-          course,
-          department,
           descriptor,
           image: snapshot,
-          fullName: `${firstName} ${lastName}`,
+          verified: false,
+          fullName: `${formData.firstName} ${formData.lastName}`,
           createdAt: serverTimestamp(),
         });
+        userId = newUserRef.id;
       }
 
-      // Send confirmation email after successful registration
-      const emailSent = await sendSuccessEmail(email, firstName);
+      // Send verification email with all required parameters
+      const emailSent = await sendVerificationEmail(formData.email, formData.firstName, userId);
       
       await Swal.fire({
         icon: "success",
-        title: "Registration Complete",
+        title: "Verify Your Account",
         html: `
-          <div>
-            <p>Registration successful!</p>
-            ${emailSent ? 
-              '<p class="text-green-500">Confirmation email sent to ' + email + '</p>' : 
-              '<p class="text-yellow-500">Registration complete but email could not be sent</p>'
-            }
-            <p class="text-sm mt-2">Student ID: ${studentId}</p>
-            <p class="text-sm">Course: ${course}</p>
-            <p class="text-sm">Department: ${department}</p>
+          <div class="text-left">
+            <p class="mb-4">We've sent a verification link to:</p>
+            <p class="font-medium text-emerald-600">${formData.email}</p>
+            <div class="mt-4 p-3 bg-gray-100 rounded text-sm">
+              <p>• Check your inbox for an email from University Attendance System</p>
+              <p>• Click the verification link in the email</p>
+              <p>• The link expires in 24 hours</p>
+              ${!emailSent && `<p class="text-red-500 mt-2">Email not sent! Please contact support.</p>`}
+            </div>
           </div>
         `,
         confirmButtonColor: "#10b981",
       });
 
       // Reset form
-      setFirstName("");
-      setLastName("");
-      setStudentId("");
-      setEmail("");
-      setCourse("");
-      setDepartment("");
-      setStatus("Registration successful!");
+      setFormData({
+        firstName: "",
+        lastName: "",
+        studentId: "",
+        email: "",
+        course: "",
+        department: ""
+      });
+      setStatus("Registration successful! Please verify your email.");
     } catch (error) {
       console.error('Registration Error:', error);
       Swal.fire({
@@ -310,63 +249,9 @@ const SignUp = () => {
     }
   };
 
-  const handleTeacherInvite = () => {
-    Swal.fire({
-      title: "University Invite Code",
-      html: `
-        <div class="text-center">
-          <p class="mb-4">Enter the invite code provided by your university</p>
-          <input 
-            type="text" 
-            id="inviteCode" 
-            class="swal2-input" 
-            placeholder="Enter code"
-          >
-          <p class="text-xs text-gray-500 mt-2">Contact your administrator if you don't have a code</p>
-        </div>
-      `,
-      focusConfirm: false,
-      showCancelButton: true,
-      confirmButtonText: "Verify Code",
-      confirmButtonColor: "#10b981",
-      cancelButtonColor: "#ef4444",
-      preConfirm: () => {
-        const codeInput = Swal.getPopup().querySelector('#inviteCode');
-        if (!codeInput.value) {
-          Swal.showValidationMessage("Please enter a code");
-          return false;
-        }
-        return codeInput.value;
-      },
-    }).then(async (result) => {
-      if (result.isConfirmed) {
-        const codeNumber = Number(result.value);
-        if (isNaN(codeNumber)) {
-          Swal.showValidationMessage("Please enter a valid numeric code");
-          return;
-        }
-
-        try {
-          const uniCode = collection(db, "UniversityCode");
-          const q = query(uniCode, where("InviteCode", "==", codeNumber));
-          const querySnapshot = await getDocs(q);
-
-          if (querySnapshot.empty) {
-            throw new Error("Invalid code provided");
-          }
-
-          sessionStorage.setItem("teacher-invite", "granted");
-          window.location.href = "/teacher-signup";
-        } catch (error) {
-          Swal.fire({
-            icon: "error",
-            title: "Invalid Code",
-            text: error.message,
-            confirmButtonColor: "#10b981",
-          });
-        }
-      }
-    });
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
   };
 
   const getDirectionInstruction = () => {
@@ -380,10 +265,10 @@ const SignUp = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-emerald-900 to-emerald-700 flex items-center justify-center p-4 sm:p-6">
+    <div className="min-h-screen bg-gradient-to-br from-emerald-900 to-emerald-700 flex items-center justify-center p-4">
       <div className="w-full max-w-6xl bg-white/5 backdrop-blur-md rounded-2xl shadow-xl overflow-hidden">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-0">
-          {/* Camera Preview */}
+          {/* Camera Preview Section */}
           <div className="bg-emerald-900/30 p-6 flex flex-col items-center justify-center">
             <div className="relative w-full max-w-xs aspect-square mb-6">
               <video
@@ -408,12 +293,12 @@ const SignUp = () => {
                 {isScanning ? getDirectionInstruction() : status}
               </p>
               <p className="text-emerald-200 text-sm mt-3">
-                {isScanning ? "Follow the instructions for better face capture" : "Position your face in the center of the frame"}
+                {isScanning ? "Follow the instructions for better face capture" : "Position your face in the center"}
               </p>
             </div>
           </div>
 
-          {/* Registration Form */}
+          {/* Registration Form Section */}
           <div className="bg-white/5 p-6 sm:p-8">
             <h1 className="text-2xl sm:text-3xl font-bold text-white text-center mb-6">
               Student Registration
@@ -425,9 +310,10 @@ const SignUp = () => {
                   <label className="block text-emerald-100 mb-1">First Name*</label>
                   <input
                     type="text"
-                    value={firstName}
-                    onChange={(e) => setFirstName(e.target.value)}
-                    className="w-full px-4 py-2 bg-white/10 border border-emerald-400/50 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                    name="firstName"
+                    value={formData.firstName}
+                    onChange={handleChange}
+                    className="w-full px-4 py-2 bg-white/10 border border-emerald-400/50 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     required
                   />
                 </div>
@@ -435,9 +321,10 @@ const SignUp = () => {
                   <label className="block text-emerald-100 mb-1">Last Name*</label>
                   <input
                     type="text"
-                    value={lastName}
-                    onChange={(e) => setLastName(e.target.value)}
-                    className="w-full px-4 py-2 bg-white/10 border border-emerald-400/50 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                    name="lastName"
+                    value={formData.lastName}
+                    onChange={handleChange}
+                    className="w-full px-4 py-2 bg-white/10 border border-emerald-400/50 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     required
                   />
                 </div>
@@ -447,9 +334,10 @@ const SignUp = () => {
                 <label className="block text-emerald-100 mb-1">Student ID*</label>
                 <input
                   type="text"
-                  value={studentId}
-                  onChange={(e) => setStudentId(e.target.value)}
-                  className="w-full px-4 py-2 bg-white/10 border border-emerald-400/50 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  name="studentId"
+                  value={formData.studentId}
+                  onChange={handleChange}
+                  className="w-full px-4 py-2 bg-white/10 border border-emerald-400/50 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   required
                 />
               </div>
@@ -458,9 +346,10 @@ const SignUp = () => {
                 <label className="block text-emerald-100 mb-1">Email*</label>
                 <input
                   type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-4 py-2 bg-white/10 border border-emerald-400/50 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  name="email"
+                  value={formData.email}
+                  onChange={handleChange}
+                  className="w-full px-4 py-2 bg-white/10 border border-emerald-400/50 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   required
                 />
               </div>
@@ -469,40 +358,29 @@ const SignUp = () => {
                 <div>
                   <label className="block text-emerald-100 mb-1">Course*</label>
                   <select
-                    value={course}
-                    onChange={(e) => setCourse(e.target.value)}
-                    className="w-full px-4 py-2 bg-white/10 border border-emerald-400/50 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                    name="course"
+                    value={formData.course}
+                    onChange={handleChange}
+                    className="w-full px-4 py-2 bg-white/10 border border-emerald-400/50 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     required
                   >
                     <option value="">Select Course</option>
-                    {courses.map((c) => (
-                      <option key={c} value={c}>{c}</option>
-                    ))}
+                    {courses.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="block text-emerald-100 mb-1">Department*</label>
                   <select
-                    value={department}
-                    onChange={(e) => setDepartment(e.target.value)}
-                    className="w-full px-4 py-2 bg-white/10 border border-emerald-400/50 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                    name="department"
+                    value={formData.department}
+                    onChange={handleChange}
+                    className="w-full px-4 py-2 bg-white/10 border border-emerald-400/50 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     required
                   >
                     <option value="">Select Department</option>
-                    {departments.map((d) => (
-                      <option key={d} value={d}>{d}</option>
-                    ))}
+                    {departments.map(d => <option key={d} value={d}>{d}</option>)}
                   </select>
                 </div>
-              </div>
-
-              <div className="bg-emerald-900/30 p-3 rounded-lg">
-                <p className="text-emerald-100 text-sm font-medium">Registration Process:</p>
-                <ul className="text-emerald-200 text-xs list-disc list-inside mt-1">
-                  <li>Enter your information</li>
-                  <li>Complete face registration</li>
-                  <li>Receive confirmation email</li>
-                </ul>
               </div>
 
               <button
@@ -524,19 +402,6 @@ const SignUp = () => {
                   "Register Now"
                 )}
               </button>
-
-              <div className="flex flex-col sm:flex-row justify-between items-center pt-4 border-t border-emerald-800/50">
-                <a href="/login" className="text-emerald-300 hover:text-white text-sm mb-2 sm:mb-0">
-                  Already have an account? Login
-                </a>
-                <button
-                  type="button"
-                  onClick={handleTeacherInvite}
-                  className="text-emerald-300 hover:text-white text-sm font-medium"
-                >
-                  Are you a teacher? Register here
-                </button>
-              </div>
             </form>
           </div>
         </div>
