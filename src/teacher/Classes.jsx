@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom"; // added import
+import { useNavigate } from "react-router-dom";
 import { db } from "../firebaseConfig";
 import {
   collection,
@@ -14,8 +14,9 @@ import {
   updateDoc,
   arrayRemove,
 } from "firebase/firestore";
-import { X, Calendar, Clock, Plus, Trash2, Edit } from "lucide-react";
+import { X, Calendar, Clock, Plus, Trash2, Edit, Download } from "lucide-react";
 import Swal from "sweetalert2";
+import { jsPDF } from "jspdf";
 
 const dayOptions = [
   "Monday",
@@ -258,7 +259,7 @@ const ClassModal = ({
 };
 
 const Classes = ({ currentUser }) => {
-  const navigate = useNavigate(); // initialize navigate
+  const navigate = useNavigate();
   const [showModal, setShowModal] = useState(false);
   const [editModalData, setEditModalData] = useState(null);
   const [classes, setClasses] = useState([]);
@@ -478,7 +479,6 @@ const Classes = ({ currentUser }) => {
         studentIDs: arrayRemove(studentId),
       });
 
-      // Update local state
       setStudentDetails((prev) => ({
         ...prev,
         [classId]: prev[classId].filter((student) => student.id !== studentId),
@@ -502,6 +502,69 @@ const Classes = ({ currentUser }) => {
 
   const handleEdit = (classData) => {
     setEditModalData(classData);
+  };
+
+  const downloadClassData = async (classData) => {
+    try {
+      const teacherName = teacherNames[classData.id] || "Unknown Teacher";
+      const students = studentDetails[classData.id] || [];
+      
+      // Create a new PDF document
+      const doc = new jsPDF();
+      
+      // Add header information
+      doc.setFontSize(16);
+      doc.text(classData.subjectName, 10, 10);
+      doc.setFontSize(12);
+      doc.text(`Teacher: ${teacherName}`, 10, 20);
+      doc.text(`Class Code: ${classData.joinCode}`, 10, 30);
+      doc.text(`Date: ${new Date().toLocaleDateString()}`, 10, 40);
+      
+      // Add schedule information if available
+      if (classData.schedule && classData.schedule.length > 0) {
+        doc.text("Schedule:", 10, 50);
+        let y = 60;
+        classData.schedule.forEach((sched, index) => {
+          doc.text(`${sched.day}: ${sched.start} - ${sched.end}`, 15, y);
+          y += 10;
+        });
+        y += 10; // Add extra space before students
+      }
+      
+      // Add student table header
+      doc.text("Student List:", 10, 80);
+      doc.setFontSize(10);
+      doc.text("Email", 10, 90);
+      doc.text("Student ID", 70, 90);
+      doc.text("Full Name", 120, 90);
+      
+      // Add student rows
+      let y = 100;
+      students.forEach(student => {
+        doc.text(student.email, 10, y);
+        doc.text(student.id, 70, y);
+        doc.text(student.name, 120, y);
+        y += 10;
+        
+        // Add new page if we're running out of space
+        if (y > 280) {
+          doc.addPage();
+          y = 20;
+        }
+      });
+      
+      // Save the PDF
+      doc.save(`${classData.subjectName}_student_list.pdf`);
+      
+    } catch (error) {
+      console.error("Error generating PDF:", error);
+      Swal.fire({
+        icon: "error",
+        title: "PDF Generation Failed",
+        text: "Could not generate the PDF. Please try again.",
+        confirmButtonColor: "#10b981",
+      });
+    }
   };
 
   useEffect(() => {
@@ -559,7 +622,7 @@ const Classes = ({ currentUser }) => {
             <div
               key={subject.id}
               className="bg-white rounded-lg shadow-md overflow-hidden transition-all duration-200 transform hover:-translate-y-1 hover:shadow-lg cursor-pointer"
-              onClick={() => navigate(`/teacher/classes/${subject.id}`)} // navigate on card click
+              onClick={() => navigate(`/teacher/classes/${subject.id}`)}
             >
               <div className="h-2 bg-emerald-500"></div>
               <div className="p-5">
@@ -654,15 +717,26 @@ const Classes = ({ currentUser }) => {
                       ? "Hide Students"
                       : "View Students"}
                   </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDelete(subject.id);
-                    }}
-                    className="text-sm text-red-500 hover:text-red-700 font-medium hover:underline"
-                  >
-                    Delete Class
-                  </button>
+                  <div className="space-x-4">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        downloadClassData(subject);
+                      }}
+                      className="text-sm text-blue-500 hover:text-blue-700 font-medium hover:underline flex items-center"
+                    >
+                      <Download size={16} className="mr-1" /> List
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDelete(subject.id);
+                      }}
+                      className="text-sm text-red-500 hover:text-red-700 font-medium hover:underline"
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </div>
 
                 {expandedClass === subject.id && (
@@ -684,9 +758,10 @@ const Classes = ({ currentUser }) => {
                               </p>
                             </div>
                             <button
-                              onClick={() =>
-                                removeStudent(subject.id, student.id)
-                              }
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                removeStudent(subject.id, student.id);
+                              }}
                               className="text-red-500 text-xs hover:text-red-700 hover:underline font-medium"
                             >
                               Remove

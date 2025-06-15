@@ -24,6 +24,8 @@ const SignUp = () => {
   const [lastName, setLastName] = useState("");
   const [studentId, setStudentId] = useState("");
   const [email, setEmail] = useState("");
+  const [course, setCourse] = useState("");
+  const [department, setDepartment] = useState("");
   const [status, setStatus] = useState("Initializing camera...");
   const [isLoading, setIsLoading] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
@@ -31,6 +33,28 @@ const SignUp = () => {
   const directions = ["left", "right", "up", "down", "center"];
   const directionIndexRef = useRef(0);
   const role = "student";
+
+  // Sample list of courses and departments
+  const courses = [
+    "Computer Science",
+    "Electrical Engineering",
+    "Mechanical Engineering",
+    "Civil Engineering",
+    "Business Administration",
+    "Medicine",
+    "Law",
+    "Architecture"
+  ];
+
+  const departments = [
+    "Engineering",
+    "Science",
+    "Medicine",
+    "Law",
+    "Business",
+    "Arts",
+    "Social Sciences"
+  ];
 
   useEffect(() => {
     const initModelsAndVideo = async () => {
@@ -162,7 +186,7 @@ const SignUp = () => {
     e.preventDefault();
     setIsLoading(true);
 
-    if (!firstName.trim() || !lastName.trim() || !studentId.trim() || !email.trim()) {
+    if (!firstName.trim() || !lastName.trim() || !studentId.trim() || !email.trim() || !course.trim() || !department.trim()) {
       Swal.fire({
         icon: "warning",
         title: "Missing Information",
@@ -218,6 +242,8 @@ const SignUp = () => {
           descriptor,
           image: snapshot,
           email,
+          course,
+          department,
           updatedAt: serverTimestamp(),
         });
       } else {
@@ -227,6 +253,8 @@ const SignUp = () => {
           studentId,
           email,
           role,
+          course,
+          department,
           descriptor,
           image: snapshot,
           fullName: `${firstName} ${lastName}`,
@@ -248,6 +276,8 @@ const SignUp = () => {
               '<p class="text-yellow-500">Registration complete but email could not be sent</p>'
             }
             <p class="text-sm mt-2">Student ID: ${studentId}</p>
+            <p class="text-sm">Course: ${course}</p>
+            <p class="text-sm">Department: ${department}</p>
           </div>
         `,
         confirmButtonColor: "#10b981",
@@ -258,6 +288,8 @@ const SignUp = () => {
       setLastName("");
       setStudentId("");
       setEmail("");
+      setCourse("");
+      setDepartment("");
       setStatus("Registration successful!");
     } catch (error) {
       console.error('Registration Error:', error);
@@ -431,6 +463,37 @@ const SignUp = () => {
                   className="w-full px-4 py-2 bg-white/10 border border-emerald-400/50 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                   required
                 />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-emerald-100 mb-1">Course*</label>
+                  <select
+                    value={course}
+                    onChange={(e) => setCourse(e.target.value)}
+                    className="w-full px-4 py-2 bg-white/10 border border-emerald-400/50 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                    required
+                  >
+                    <option value="">Select Course</option>
+                    {courses.map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-emerald-100 mb-1">Department*</label>
+                  <select
+                    value={department}
+                    onChange={(e) => setDepartment(e.target.value)}
+                    className="w-full px-4 py-2 bg-white/10 border border-emerald-400/50 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                    required
+                  >
+                    <option value="">Select Department</option>
+                    {departments.map((d) => (
+                      <option key={d} value={d}>{d}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
               <div className="bg-emerald-900/30 p-3 rounded-lg">

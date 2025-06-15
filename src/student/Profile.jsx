@@ -11,7 +11,8 @@ const Profile = () => {
     role: '',
     email: '',
     studentId: '',
-    middleInitial: ''
+    middleInitial: '',
+    department: ''
   });
   const [formData, setFormData] = useState({ ...profileData });
   const [isEditing, setIsEditing] = useState(false);
@@ -164,6 +165,12 @@ const Profile = () => {
                 <h3 className="text-sm font-medium text-gray-500">Email</h3>
                 <p className="mt-1 text-lg text-gray-900">{profileData.email}</p>
               </div>
+              {profileData.department && (
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <h3 className="text-sm font-medium text-gray-500">Department</h3>
+                  <p className="mt-1 text-lg text-gray-900">{profileData.department}</p>
+                </div>
+              )}
               {profileData.course && (
                 <div className="bg-gray-50 p-4 rounded-lg">
                   <h3 className="text-sm font-medium text-gray-500">Course</h3>
@@ -248,6 +255,26 @@ const Profile = () => {
                       required
                       disabled
                     />
+                  </div>
+                  <div>
+                    <label htmlFor="department" className="block text-sm font-medium text-gray-700 mb-1">
+                      Department
+                    </label>
+                    <select
+                      id="department"
+                      name="department"
+                      value={formData.department}
+                      onChange={handleChange}
+                      className="block w-full rounded-md border-gray-300 shadow-sm p-3 border focus:border-emerald-500 focus:ring focus:ring-emerald-200"
+                      required
+                    >
+                      <option value="">Select Department</option>
+                      <option value="College of Computer Studies">College of Computer Studies</option>
+                      <option value="College of Engineering">College of Engineering</option>
+                      <option value="College of Business">College of Business</option>
+                      <option value="College of Arts and Sciences">College of Arts and Sciences</option>
+                      <option value="College of Education">College of Education</option>
+                    </select>
                   </div>
                   <div>
                     <label htmlFor="course" className="block text-sm font-medium text-gray-700 mb-1">
