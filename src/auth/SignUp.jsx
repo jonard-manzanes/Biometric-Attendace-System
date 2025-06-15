@@ -2,12 +2,21 @@ import React, { useEffect, useRef, useState } from "react";
 import * as faceapi from "face-api.js";
 import Swal from "sweetalert2";
 import { db } from "../firebaseConfig";
-import { collection, addDoc, query, where, getDocs, updateDoc, doc, serverTimestamp } from "firebase/firestore";
-import emailjs from '@emailjs/browser';
-import { v4 as uuidv4 } from 'uuid';
+import {
+  collection,
+  addDoc,
+  query,
+  where,
+  getDocs,
+  updateDoc,
+  doc,
+  serverTimestamp,
+} from "firebase/firestore";
+import emailjs from "@emailjs/browser";
+import { v4 as uuidv4 } from "uuid";
 
 // Initialize EmailJS with your Public Key
-emailjs.init('iZA0kY1GD5ZucGLE8');
+emailjs.init("iZA0kY1GD5ZucGLE8");
 
 const SignUp = () => {
   const videoRef = useRef();
@@ -18,7 +27,7 @@ const SignUp = () => {
     studentId: "",
     email: "",
     course: "",
-    department: ""
+    department: "",
   });
   const [status, setStatus] = useState("Initializing camera...");
   const [isLoading, setIsLoading] = useState(false);
@@ -28,7 +37,11 @@ const SignUp = () => {
   const directionIndexRef = useRef(0);
   const role = "student";
 
-  const courses = ["Computer Science", "Electrical Engineering", "Mechanical Engineering"];
+  const courses = [
+    "Computer Science",
+    "Electrical Engineering",
+    "Mechanical Engineering",
+  ];
   const departments = ["Engineering", "Science", "Business"];
 
   useEffect(() => {
@@ -36,13 +49,21 @@ const SignUp = () => {
       try {
         setStatus("Loading face recognition models...");
         await Promise.all([
-          faceapi.nets.tinyFaceDetector.loadFromUri("/models/tiny_face_detector_model"),
-          faceapi.nets.faceLandmark68Net.loadFromUri("/models/face_landmark_68_model"),
-          faceapi.nets.faceRecognitionNet.loadFromUri("/models/face_recognition_model"),
+          faceapi.nets.tinyFaceDetector.loadFromUri(
+            "/models/tiny_face_detector_model"
+          ),
+          faceapi.nets.faceLandmark68Net.loadFromUri(
+            "/models/face_landmark_68_model"
+          ),
+          faceapi.nets.faceRecognitionNet.loadFromUri(
+            "/models/face_recognition_model"
+          ),
         ]);
 
         setStatus("Accessing camera...");
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "user" },
+        });
         videoRef.current.srcObject = stream;
         setStatus("Ready for registration");
       } catch (error) {
@@ -61,15 +82,16 @@ const SignUp = () => {
 
     return () => {
       if (videoRef.current?.srcObject) {
-        videoRef.current.srcObject.getTracks().forEach(track => track.stop());
+        videoRef.current.srcObject.getTracks().forEach((track) => track.stop());
       }
     };
   }, []);
 
   const changeDirection = () => {
-    directionIndexRef.current = (directionIndexRef.current + 1) % directions.length;
+    directionIndexRef.current =
+      (directionIndexRef.current + 1) % directions.length;
     setCurrentDirection(directions[directionIndexRef.current]);
-    
+
     if (directionIndexRef.current === directions.length - 1) {
       setTimeout(() => setCurrentDirection("center"), 2000);
     }
@@ -95,27 +117,31 @@ const SignUp = () => {
         userId,
         token: verificationToken,
         createdAt: serverTimestamp(),
-        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours from now
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours from now
       };
       await addDoc(collection(db, "verificationTokens"), verificationDoc);
 
       const verificationLink = `${window.location.origin}/verify-email?token=${verificationToken}&userId=${userId}`;
 
       // Updated to match template variables exactly
-      const response = await emailjs.send('service_h073o6m', 'template_hoohcer', {
-        link: verificationLink,  // Must match {{link}} in template
-        email: email,           // Must match {{email}} in template
-        websiteUrl: "https://your-university.edu",  // For logo link
-        companyName: "University Attendance System" // For footer
-      });
-      
-      console.log('Email sent successfully:', response);
+      const response = await emailjs.send(
+        "service_h073o6m",
+        "template_hoohcer",
+        {
+          link: verificationLink, // Must match {{link}} in template
+          email: email, // Must match {{email}} in template
+          websiteUrl: "https://biometric-attendace-system.vercel.app/", // For logo link
+          companyName: "University Attendance System", // For footer
+        }
+      );
+
+      console.log("Email sent successfully:", response);
       return true;
     } catch (error) {
-      console.error('Failed to send verification email:', {
+      console.error("Failed to send verification email:", {
         code: error.code,
         message: error.message,
-        text: error.text
+        text: error.text,
       });
       return false;
     }
@@ -131,7 +157,10 @@ const SignUp = () => {
   };
 
   const checkIfStudentExists = async (studentId) => {
-    const q = query(collection(db, "users"), where("studentId", "==", studentId));
+    const q = query(
+      collection(db, "users"),
+      where("studentId", "==", studentId)
+    );
     const querySnapshot = await getDocs(q);
     return querySnapshot.empty ? null : querySnapshot.docs[0];
   };
@@ -141,7 +170,10 @@ const SignUp = () => {
     const querySnapshot = await getDocs(q);
 
     for (const doc of querySnapshot.docs) {
-      const distance = faceapi.euclideanDistance(descriptor, doc.data().descriptor);
+      const distance = faceapi.euclideanDistance(
+        descriptor,
+        doc.data().descriptor
+      );
       if (distance < 0.3) return true;
     }
     return false;
@@ -155,15 +187,21 @@ const SignUp = () => {
       // First complete face registration
       const stopScanning = startFaceScan();
       setStatus("Detecting face...");
-      
+
       const detection = await faceapi
-        .detectSingleFace(videoRef.current, new faceapi.TinyFaceDetectorOptions())
+        .detectSingleFace(
+          videoRef.current,
+          new faceapi.TinyFaceDetectorOptions()
+        )
         .withFaceLandmarks()
         .withFaceDescriptor();
 
       stopScanning();
 
-      if (!detection) throw new Error("No face detected. Please ensure your face is visible and well-lit.");
+      if (!detection)
+        throw new Error(
+          "No face detected. Please ensure your face is visible and well-lit."
+        );
 
       const descriptor = Array.from(detection.descriptor);
       if (await checkIfFaceExists(descriptor)) {
@@ -200,8 +238,12 @@ const SignUp = () => {
       }
 
       // Send verification email with all required parameters
-      const emailSent = await sendVerificationEmail(formData.email, formData.firstName, userId);
-      
+      const emailSent = await sendVerificationEmail(
+        formData.email,
+        formData.firstName,
+        userId
+      );
+
       await Swal.fire({
         icon: "success",
         title: "Verify Your Account",
@@ -227,11 +269,11 @@ const SignUp = () => {
         studentId: "",
         email: "",
         course: "",
-        department: ""
+        department: "",
       });
       setStatus("Registration successful! Please verify your email.");
     } catch (error) {
-      console.error('Registration Error:', error);
+      console.error("Registration Error:", error);
       Swal.fire({
         icon: "error",
         title: "Registration Failed",
@@ -251,16 +293,80 @@ const SignUp = () => {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    setFormData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleTeacherInvite = () => {
+    Swal.fire({
+      title: "University Invite Code",
+      html: `
+        <div class="text-center">
+          <p class="mb-4">Enter the invite code provided by your university</p>
+          <input 
+            type="text" 
+            id="inviteCode" 
+            class="swal2-input" 
+            placeholder="Enter code"
+          >
+          <p class="text-xs text-gray-500 mt-2">Contact your administrator if you don't have a code</p>
+        </div>
+      `,
+      focusConfirm: false,
+      showCancelButton: true,
+      confirmButtonText: "Verify Code",
+      confirmButtonColor: "#10b981",
+      cancelButtonColor: "#ef4444",
+      preConfirm: () => {
+        const codeInput = Swal.getPopup().querySelector('#inviteCode');
+        if (!codeInput.value) {
+          Swal.showValidationMessage("Please enter a code");
+          return false;
+        }
+        return codeInput.value;
+      },
+    }).then(async (result) => {
+      if (result.isConfirmed) {
+        const codeNumber = Number(result.value);
+        if (isNaN(codeNumber)) {
+          Swal.showValidationMessage("Please enter a valid numeric code");
+          return;
+        }
+
+        try {
+          const uniCode = collection(db, "UniversityCode");
+          const q = query(uniCode, where("InviteCode", "==", codeNumber));
+          const querySnapshot = await getDocs(q);
+
+          if (querySnapshot.empty) {
+            throw new Error("Invalid code provided");
+          }
+
+          sessionStorage.setItem("teacher-invite", "granted");
+          window.location.href = "/teacher-signup";
+        } catch (error) {
+          Swal.fire({
+            icon: "error",
+            title: "Invalid Code",
+            text: error.message,
+            confirmButtonColor: "#10b981",
+          });
+        }
+      }
+    });
   };
 
   const getDirectionInstruction = () => {
     switch (currentDirection) {
-      case "left": return "Please turn your head slowly to the left";
-      case "right": return "Please turn your head slowly to the right";
-      case "up": return "Please look up slowly";
-      case "down": return "Please look down slowly";
-      default: return "Please look straight at the camera";
+      case "left":
+        return "Please turn your head slowly to the left";
+      case "right":
+        return "Please turn your head slowly to the right";
+      case "up":
+        return "Please look up slowly";
+      case "down":
+        return "Please look down slowly";
+      default:
+        return "Please look straight at the camera";
     }
   };
 
@@ -278,7 +384,7 @@ const SignUp = () => {
                 className="w-full h-full rounded-xl object-cover border-4 border-emerald-400 shadow-lg"
               />
               <canvas ref={canvasRef} className="hidden" />
-              
+
               {isScanning && currentDirection !== "center" && (
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                   <div className="text-white text-xl font-bold bg-black/50 px-4 py-2 rounded-lg animate-pulse">
@@ -287,13 +393,15 @@ const SignUp = () => {
                 </div>
               )}
             </div>
-            
+
             <div className="text-center w-full">
               <p className="text-emerald-100 font-medium bg-emerald-800/50 rounded-lg py-2 px-4">
                 {isScanning ? getDirectionInstruction() : status}
               </p>
               <p className="text-emerald-200 text-sm mt-3">
-                {isScanning ? "Follow the instructions for better face capture" : "Position your face in the center"}
+                {isScanning
+                  ? "Follow the instructions for better face capture"
+                  : "Position your face in the center"}
               </p>
             </div>
           </div>
@@ -307,7 +415,9 @@ const SignUp = () => {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-emerald-100 mb-1">First Name*</label>
+                  <label className="block text-emerald-100 mb-1">
+                    First Name*
+                  </label>
                   <input
                     type="text"
                     name="firstName"
@@ -318,7 +428,9 @@ const SignUp = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-emerald-100 mb-1">Last Name*</label>
+                  <label className="block text-emerald-100 mb-1">
+                    Last Name*
+                  </label>
                   <input
                     type="text"
                     name="lastName"
@@ -331,7 +443,9 @@ const SignUp = () => {
               </div>
 
               <div>
-                <label className="block text-emerald-100 mb-1">Student ID*</label>
+                <label className="block text-emerald-100 mb-1">
+                  Student ID*
+                </label>
                 <input
                   type="text"
                   name="studentId"
@@ -361,24 +475,38 @@ const SignUp = () => {
                     name="course"
                     value={formData.course}
                     onChange={handleChange}
-                    className="w-full px-4 py-2 bg-white/10 border border-emerald-400/50 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="w-full px-4 py-2 bg-emerald-900/80 border border-emerald-400/50 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 appearance-none"
                     required
                   >
-                    <option value="">Select Course</option>
-                    {courses.map(c => <option key={c} value={c}>{c}</option>)}
+                    <option value="" className="bg-emerald-900">
+                      Select Course
+                    </option>
+                    {courses.map((c) => (
+                      <option key={c} value={c} className="bg-emerald-900">
+                        {c}
+                      </option>
+                    ))}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-emerald-100 mb-1">Department*</label>
+                  <label className="block text-emerald-100 mb-1">
+                    Department*
+                  </label>
                   <select
                     name="department"
                     value={formData.department}
                     onChange={handleChange}
-                    className="w-full px-4 py-2 bg-white/10 border border-emerald-400/50 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="w-full px-4 py-2 bg-emerald-900/80 border border-emerald-400/50 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 appearance-none"
                     required
                   >
-                    <option value="">Select Department</option>
-                    {departments.map(d => <option key={d} value={d}>{d}</option>)}
+                    <option value="" className="bg-emerald-900">
+                      Select Department
+                    </option>
+                    {departments.map((d) => (
+                      <option key={d} value={d} className="bg-emerald-900">
+                        {d}
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -387,14 +515,32 @@ const SignUp = () => {
                 type="submit"
                 disabled={isLoading}
                 className={`w-full py-3 px-4 rounded-lg font-semibold transition-colors ${
-                  isLoading ? "bg-emerald-700 cursor-not-allowed" : "bg-emerald-600 hover:bg-emerald-500"
+                  isLoading
+                    ? "bg-emerald-700 cursor-not-allowed"
+                    : "bg-emerald-600 hover:bg-emerald-500"
                 } text-white flex items-center justify-center`}
               >
                 {isLoading ? (
                   <>
-                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    <svg
+                      className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      ></circle>
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                      ></path>
                     </svg>
                     Processing...
                   </>
@@ -402,6 +548,23 @@ const SignUp = () => {
                   "Register Now"
                 )}
               </button>
+
+              {/* Added login and teacher registration links */}
+              <div className="flex flex-col sm:flex-row justify-between items-center pt-4 border-t border-emerald-800/50">
+                <a 
+                  href="/login" 
+                  className="text-emerald-300 hover:text-white text-sm mb-2 sm:mb-0"
+                >
+                  Already have an account? Login
+                </a>
+                <button
+                  type="button"
+                  onClick={handleTeacherInvite}
+                  className="text-emerald-300 hover:text-white text-sm font-medium"
+                >
+                  Are you a teacher? Register here
+                </button>
+              </div>
             </form>
           </div>
         </div>
