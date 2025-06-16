@@ -1,20 +1,24 @@
 import React, { useState, useEffect } from "react";
 import { db } from "../firebaseConfig";
-import { collection, getDocs, query, where } from "firebase/firestore";
-import { Calendar, Clock, Users, BookOpen, ChevronDown, ChevronUp, User } from "lucide-react";
+import { collection, getDocs, query, where, doc, deleteDoc } from "firebase/firestore";
+import { Calendar, Users, BookOpen, ChevronDown, ChevronUp, User, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import Swal from 'sweetalert2';
+import withReactContent from 'sweetalert2-react-content';
+
+const MySwal = withReactContent(Swal);
 
 const Instructors = () => {
   const [instructors, setInstructors] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [expandedInstructor, setExpandedInstructor] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
   const navigate = useNavigate();
 
   useEffect(() => {
     const fetchInstructors = async () => {
       try {
-        // Get student's department from localStorage
         const studentDepartment = localStorage.getItem('studentDepartment');
         
         if (!studentDepartment) {
@@ -23,7 +27,6 @@ const Instructors = () => {
           return;
         }
 
-        // Get all teachers in the same department as the student
         const q = query(
           collection(db, "users"), 
           where("role", "==", "teacher"),
@@ -37,14 +40,12 @@ const Instructors = () => {
           const instructor = docRef.data();
           const instructorId = docRef.id;
           
-          // Get classes taught by this instructor
           const classesQuery = query(
             collection(db, "classes"),
             where("teacherID", "==", instructorId)
           );
           const classesSnapshot = await getDocs(classesQuery);
           
-          // For each class, get the number of students
           const classesWithStudentCount = await Promise.all(
             classesSnapshot.docs.map(async (doc) => {
               const classData = doc.data();
@@ -77,6 +78,67 @@ const Instructors = () => {
 
   const toggleInstructor = (instructorId) => {
     setExpandedInstructor(expandedInstructor === instructorId ? null : instructorId);
+  };
+
+  const handleDeleteInstructor = async (instructorId) => {
+    const result = await MySwal.fire({
+      title: 'Delete Instructor?',
+      text: "This will permanently delete the instructor and all their classes. This action cannot be undone!",
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#d33',
+      cancelButtonColor: '#3085d6',
+      confirmButtonText: 'Yes, delete it!',
+      cancelButtonText: 'Cancel',
+      reverseButtons: true,
+      backdrop: `
+        rgba(0,0,0,0.7)
+        url("/images/nyan-cat.gif")
+        left top
+        no-repeat
+      `
+    });
+
+    if (!result.isConfirmed) return;
+
+    setDeletingId(instructorId);
+    try {
+      // Delete all classes first
+      const classesQuery = query(
+        collection(db, "classes"),
+        where("teacherID", "==", instructorId)
+      );
+      const classesSnapshot = await getDocs(classesQuery);
+      
+      const deleteClassPromises = classesSnapshot.docs.map(async (classDoc) => {
+        await deleteDoc(doc(db, "classes", classDoc.id));
+      });
+      
+      await Promise.all(deleteClassPromises);
+      
+      // Then delete the instructor
+      await deleteDoc(doc(db, "users", instructorId));
+      
+      // Update UI
+      setInstructors(instructors.filter(instructor => instructor.id !== instructorId));
+      
+      await MySwal.fire({
+        title: 'Deleted!',
+        text: 'The instructor and their classes have been deleted.',
+        icon: 'success',
+        timer: 2000,
+        showConfirmButton: false
+      });
+    } catch (err) {
+      console.error("Error deleting instructor:", err);
+      await MySwal.fire({
+        title: 'Error!',
+        text: 'Failed to delete instructor. Please try again.',
+        icon: 'error'
+      });
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   if (loading) {
@@ -137,6 +199,22 @@ const Instructors = () => {
                 <BookOpen size={16} className="text-emerald-500 mr-1" />
                 <span>{instructor.classes.length} classes</span>
               </div>
+              
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDeleteInstructor(instructor.id);
+                }}
+                disabled={deletingId === instructor.id}
+                className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
+                title="Delete instructor"
+              >
+                {deletingId === instructor.id ? (
+                  <span className="text-sm">Deleting...</span>
+                ) : (
+                  <Trash2 size={18} />
+                )}
+              </button>
               
               {expandedInstructor === instructor.id ? (
                 <ChevronUp size={20} className="text-gray-500" />
