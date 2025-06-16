@@ -146,7 +146,7 @@ export default function StudentLayout() {
             />
             <SidebarLink
               icon={<CalendarCheck size={20} />}
-              text="My Attendance"
+              text="My Classes"
               active={currentPage === "attendance"}
               onClick={() => handleNavigate("attendance")}
               sidebarOpen={sidebarOpen}

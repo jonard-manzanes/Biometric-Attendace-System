@@ -787,7 +787,7 @@ const submitExcuse = async (subject) => {
 )}
 
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-800">Class Attendance</h1>
+        <h1 className="text-2xl font-bold text-gray-800">Classes</h1>
         <p className="text-gray-600 mt-1">
           Track your attendance for all enrolled classes
         </p>
