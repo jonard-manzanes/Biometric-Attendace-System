@@ -21,7 +21,6 @@ import AdminLayout from "./admin/AdminLayout";
 import AdminDashboard from "./admin/Dashboard";
 import UserManagement from "./admin/UserManagement";
 import Reports from "./admin/Reports";
-import ProofofClasses from "./admin/ClassesProof"
 import AccessCodes from "./admin/AccessCodes";
 import QuickAttendance from "./auth/quickAttendance";
 
@@ -88,7 +87,6 @@ function App() {
           <Route path="dashboard" element={<AdminDashboard />} />
           <Route path="user-management" element={<UserManagement />} />
           <Route path="access-codes" element={<AccessCodes />} />
-          <Route path="classes-proof" element={<ProofofClasses />} />
           <Route path="reports" element={<Reports />} />
         </Route>
 

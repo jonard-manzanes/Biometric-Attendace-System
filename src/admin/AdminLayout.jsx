@@ -148,13 +148,7 @@ export default function AdminLayout() {
               onClick={() => handleNavigate("user-management")}
               sidebarOpen={sidebarOpen}
             />
-            <SidebarLink
-              icon={<FileText size={20} />}
-              text="Classes Proof"
-              active={currentPage === "classes-proof"}
-              onClick={() => handleNavigate("classes-proof")}
-              sidebarOpen={sidebarOpen}
-            />
+            
             <SidebarLink
               icon={<FileText size={20} />}
               text="Code"
