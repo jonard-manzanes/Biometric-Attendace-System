@@ -61,7 +61,7 @@ const Login = () => {
 
       const code = Math.floor(100000 + Math.random() * 900000).toString();
 
-      await emailjs.send("service_h073o6m", "template_ssada75", {
+      await emailjs.send("service_h073o6m", "template_hgc94hc", {
         passcode: code,
         time: "15 minutes",
         email: email,
