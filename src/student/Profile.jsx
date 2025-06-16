@@ -141,15 +141,15 @@ const Profile = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="bg-gray-50 p-4 rounded-lg">
                 <h3 className="text-sm font-medium text-gray-500">First Name</h3>
-                <p className="mt-1 text-lg text-gray-900">{profileData.firstName}</p>
+                <p className="mt-1 text-lg text-gray-900 capitalize">{profileData.firstName}</p>
               </div>
               <div className="bg-gray-50 p-4 rounded-lg">
                 <h3 className="text-sm font-medium text-gray-500">Middle Initial</h3>
-                <p className="mt-1 text-lg text-gray-900">{profileData.middleInitial || '-'}</p>
+                <p className="mt-1 text-lg text-gray-900 capitalize">{profileData.middleInitial || '-'}</p>
               </div>
               <div className="bg-gray-50 p-4 rounded-lg">
                 <h3 className="text-sm font-medium text-gray-500">Last Name</h3>
-                <p className="mt-1 text-lg text-gray-900">{profileData.lastName}</p>
+                <p className="mt-1 text-lg text-gray-900 capitalize">{profileData.lastName}</p>
               </div>
               <div className="bg-gray-50 p-4 rounded-lg">
                 <h3 className="text-sm font-medium text-gray-500">Role</h3>
