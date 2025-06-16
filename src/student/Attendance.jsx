@@ -218,6 +218,16 @@ const Attendance = () => {
   };
 
   const handleMarkAttendance = (subject) => {
+    // Don't allow marking attendance if excuse is approved
+    if (subject.excuseStatus === "approved") {
+      Swal.fire({
+        icon: "info",
+        title: "Excuse Approved",
+        text: "Your attendance has been excused for today.",
+      });
+      return;
+    }
+
     const now = new Date();
     const currentDay = now.toLocaleString("en-US", { weekday: "long" });
     const currentHours = now.getHours();
@@ -364,6 +374,7 @@ const Attendance = () => {
 
         let status = "none";
         let excuseSubmitted = false;
+        let excuseStatus = null;
         if (attendanceSnap.exists()) {
           const data = attendanceSnap.data();
           if (data.timeIn && data.timeOut) {
@@ -373,6 +384,7 @@ const Attendance = () => {
           }
           if (data.excuse) {
             excuseSubmitted = true;
+            excuseStatus = data.excuse.status;
           }
         }
 
@@ -381,7 +393,8 @@ const Attendance = () => {
           teacherName,
           schedule: scheduleWith12HourFormat,
           attendanceStatus: status,
-          excuseSubmitted, // new field for excuse submission
+          excuseSubmitted,
+          excuseStatus,
         };
       });
 
@@ -392,144 +405,141 @@ const Attendance = () => {
     }
   };
 
-  // New function to submit an excuse
-const submitExcuse = async (subject) => {
-  const now = new Date();
-  const currentDay = now.toLocaleString("en-US", { weekday: "long" });
-  const todaysSchedule = subject.schedule?.find((s) => s.day === currentDay);
+  const submitExcuse = async (subject) => {
+    const now = new Date();
+    const currentDay = now.toLocaleString("en-US", { weekday: "long" });
+    const todaysSchedule = subject.schedule?.find((s) => s.day === currentDay);
 
-  if (!todaysSchedule) {
-    Swal.fire({
-      icon: "error",
-      title: "No Class Today",
-      text: "You can only submit an excuse for classes scheduled today.",
-    });
-    return;
-  }
-
-  // Check if the class has already ended
-  const currentTime24 = `${now.getHours()}:${
-    now.getMinutes() < 10 ? "0" + now.getMinutes() : now.getMinutes()
-  }`;
-  const currentTime12 = convertTo12HourFormat(currentTime24);
-  const currentMinutes = timeToMinutes(currentTime12);
-  const classEndMinutes = timeToMinutes(todaysSchedule.end);
-
-  if (currentMinutes > classEndMinutes) {
-    Swal.fire({
-      icon: "error",
-      title: "Class Completed",
-      text: "You cannot submit an excuse as the class has already ended.",
-    });
-    return;
-  }
-
-  const { value: formValues } = await Swal.fire({
-    title: "Submit Excuse",
-    html: `
-      <div class="mb-4">
-        <label for="excuseReason" class="block text-gray-700 text-sm font-medium mb-2">Reason for Excuse</label>
-        <textarea 
-          id="excuseReason" 
-          class="w-full px-3 py-2 text-gray-700 border rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-300" 
-          rows="4"
-          placeholder="Please explain why you need to be excused..."
-        ></textarea>
-      </div>
-      <div>
-        <label for="proofImage" class="block text-gray-700 text-sm font-medium mb-2">Upload Proof Image</label>
-        <input 
-          id="proofImage" 
-          type="file" 
-          accept="image/*" 
-          class="w-full px-3 py-2 text-gray-700 border rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-300"
-        />
-      </div>
-    `,
-    focusConfirm: false,
-    showCancelButton: true,
-    confirmButtonText: "Submit",
-    cancelButtonText: "Cancel",
-    showLoaderOnConfirm: true,
-    preConfirm: () => {
-      const reason = document.getElementById("excuseReason").value;
-      const fileInput = document.getElementById("proofImage");
-      const file = fileInput.files[0];
-      if (!reason) {
-        Swal.showValidationMessage("Please enter a reason for your excuse");
-      }
-      if (!file) {
-        Swal.showValidationMessage("Please upload an image as proof");
-      }
-      return { reason, file };
-    },
-    customClass: {
-      popup: 'rounded-xl',
-      htmlContainer: 'text-left'
+    if (!todaysSchedule) {
+      Swal.fire({
+        icon: "error",
+        title: "No Class Today",
+        text: "You can only submit an excuse for classes scheduled today.",
+      });
+      return;
     }
-  });
 
-  if (!formValues) return;
+    // Check if the class has already ended
+    const currentTime24 = `${now.getHours()}:${
+      now.getMinutes() < 10 ? "0" + now.getMinutes() : now.getMinutes()
+    }`;
+    const currentTime12 = convertTo12HourFormat(currentTime24);
+    const currentMinutes = timeToMinutes(currentTime12);
+    const classEndMinutes = timeToMinutes(todaysSchedule.end);
 
-  // Rest of the function remains the same...
-  const uploadImageToCloudinary = async (file) => {
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("upload_preset", "attendance_excuses");
+    if (currentMinutes > classEndMinutes) {
+      Swal.fire({
+        icon: "error",
+        title: "Class Completed",
+        text: "You cannot submit an excuse as the class has already ended.",
+      });
+      return;
+    }
 
-    const response = await fetch(
-      "https://api.cloudinary.com/v1_1/dzufxspg4/image/upload",
-      {
-        method: "POST",
-        body: formData,
+    const { value: formValues } = await Swal.fire({
+      title: "Submit Excuse",
+      html: `
+        <div class="mb-4">
+          <label for="excuseReason" class="block text-gray-700 text-sm font-medium mb-2">Reason for Excuse</label>
+          <textarea 
+            id="excuseReason" 
+            class="w-full px-3 py-2 text-gray-700 border rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-300" 
+            rows="4"
+            placeholder="Please explain why you need to be excused..."
+          ></textarea>
+        </div>
+        <div>
+          <label for="proofImage" class="block text-gray-700 text-sm font-medium mb-2">Upload Proof Image</label>
+          <input 
+            id="proofImage" 
+            type="file" 
+            accept="image/*" 
+            class="w-full px-3 py-2 text-gray-700 border rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-300"
+          />
+        </div>
+      `,
+      focusConfirm: false,
+      showCancelButton: true,
+      confirmButtonText: "Submit",
+      cancelButtonText: "Cancel",
+      showLoaderOnConfirm: true,
+      preConfirm: () => {
+        const reason = document.getElementById("excuseReason").value;
+        const fileInput = document.getElementById("proofImage");
+        const file = fileInput.files[0];
+        if (!reason) {
+          Swal.showValidationMessage("Please enter a reason for your excuse");
+        }
+        if (!file) {
+          Swal.showValidationMessage("Please upload an image as proof");
+        }
+        return { reason, file };
+      },
+      customClass: {
+        popup: 'rounded-xl',
+        htmlContainer: 'text-left'
       }
-    );
-    const data = await response.json();
-    return data.secure_url;
-  };
+    });
 
-  try {
-    const imageUrl = await uploadImageToCloudinary(formValues.file);
-    const studentID = localStorage.getItem("userDocId");
-    const today = now.toISOString().split("T")[0];
-    const classID =
-      subject.joinCode || subject.subjectName.replace(/\s/g, "_");
-    const attendanceRef = doc(db, "attendance", classID, today, studentID);
-    const attendanceSnap = await getDoc(attendanceRef);
+    if (!formValues) return;
 
-    const excuseData = {
-      reason: formValues.reason,
-      image: imageUrl,
-      status: "pending",
-      submittedAt: serverTimestamp(),
+    const uploadImageToCloudinary = async (file) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("upload_preset", "attendance_excuses");
+
+      const response = await fetch(
+        "https://api.cloudinary.com/v1_1/dzufxspg4/image/upload",
+        {
+          method: "POST",
+          body: formData,
+        }
+      );
+      const data = await response.json();
+      return data.secure_url;
     };
 
-    if (attendanceSnap.exists()) {
-      await updateDoc(attendanceRef, {
-        excuse: excuseData,
+    try {
+      const imageUrl = await uploadImageToCloudinary(formValues.file);
+      const studentID = localStorage.getItem("userDocId");
+      const today = now.toISOString().split("T")[0];
+      const classID =
+        subject.joinCode || subject.subjectName.replace(/\s/g, "_");
+      const attendanceRef = doc(db, "attendance", classID, today, studentID);
+      const attendanceSnap = await getDoc(attendanceRef);
+
+      const excuseData = {
+        reason: formValues.reason,
+        image: imageUrl,
+        status: "pending",
+        submittedAt: serverTimestamp(),
+      };
+
+      if (attendanceSnap.exists()) {
+        await updateDoc(attendanceRef, {
+          excuse: excuseData,
+        });
+      } else {
+        await setDoc(attendanceRef, {
+          excuse: excuseData,
+        });
+      }
+      Swal.fire({
+        icon: "success",
+        title: "Excuse Submitted",
+        text: "Your excuse has been submitted and is pending approval.",
       });
-    } else {
-      await setDoc(attendanceRef, {
-        excuse: excuseData,
+      fetchSubjectsAndAttendance();
+    } catch (error) {
+      console.error("Error submitting excuse", error);
+      Swal.fire({
+        icon: "error",
+        title: "Error",
+        text: "Could not submit excuse. Please try again later.",
       });
     }
-    Swal.fire({
-      icon: "success",
-      title: "Excuse Submitted",
-      text: "Your excuse has been submitted and is pending approval.",
-    });
-    fetchSubjectsAndAttendance();
-  } catch (error) {
-    console.error("Error submitting excuse", error);
-    Swal.fire({
-      icon: "error",
-      title: "Error",
-      text: "Could not submit excuse. Please try again later.",
-    });
-  }
-};
+  };
 
-  // Inline AttendanceCard component inside Attendance component
   const AttendanceCard = ({
     subject,
     index,
@@ -580,7 +590,8 @@ const submitExcuse = async (subject) => {
 
     const isMarkAttendanceDisabled =
       subject.attendanceStatus === "completed" ||
-      (subject.attendanceStatus === "timeIn" && !canTimeOut);
+      (subject.attendanceStatus === "timeIn" && !canTimeOut) ||
+      subject.excuseStatus === "approved";
 
     return (
       <div
@@ -658,7 +669,30 @@ const submitExcuse = async (subject) => {
             <div className="mt-4 pt-4 border-t border-gray-200">
               {subject.attendanceStatus === "none" ? (
                 <div className="space-y-2 mt-4">
-                  {!subject.excuseSubmitted && (
+                  {subject.excuseSubmitted ? (
+                    subject.excuseStatus === "approved" ? (
+                      <button
+                        className="w-full bg-green-500 text-white py-2 rounded text-sm cursor-not-allowed"
+                        disabled
+                      >
+                        Excuse Approved
+                      </button>
+                    ) : subject.excuseStatus === "rejected" ? (
+                      <button
+                        className="w-full bg-red-500 text-white py-2 rounded text-sm cursor-not-allowed"
+                        disabled
+                      >
+                        Excuse Rejected
+                      </button>
+                    ) : (
+                      <button
+                        className="w-full bg-gray-400 text-white py-2 rounded text-sm cursor-not-allowed"
+                        disabled
+                      >
+                        Pending Excuse
+                      </button>
+                    )
+                  ) : (
                     <>
                       <button
                         className="w-full bg-emerald-500 hover:bg-emerald-600 text-white py-2 rounded text-sm transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-emerald-300"
@@ -679,14 +713,6 @@ const submitExcuse = async (subject) => {
                         Submit Excuse
                       </button>
                     </>
-                  )}
-                  {subject.excuseSubmitted && (
-                    <button
-                      className="w-full bg-gray-400 text-white py-2 rounded text-sm cursor-not-allowed"
-                      disabled
-                    >
-                      Pending Excuse
-                    </button>
                   )}
                 </div>
               ) : (
@@ -730,61 +756,59 @@ const submitExcuse = async (subject) => {
 
   return (
     <div>
-{showFaceModal && (
-  <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-    {/* Semi-transparent overlay that shows the main content behind */}
-    <div className="absolute inset-0 bg-gray-500/30 backdrop-blur-sm"></div>
-    
-    {/* Modal container */}
-    <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden border border-gray-200">
-      <div className="p-6">
-        <h2 className="text-center text-1xl font-bold text-gray-800 mb-4">Verify Your Identity</h2>
-        
-        <div className="relative mb-6">
-          <video
-            ref={videoRef}
-            autoPlay
-            muted
-            className="w-full h-auto rounded-lg border-2 border-gray-200"
-            style={{ minHeight: '400px' }}
-          />
-          {isVerifying && (
-            <div className="absolute inset-0 flex items-center justify-center bg-white/70 rounded-lg">
-              <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-emerald-500"></div>
+      {showFaceModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-gray-500/30 backdrop-blur-sm"></div>
+          
+          <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden border border-gray-200">
+            <div className="p-6">
+              <h2 className="text-center text-1xl font-bold text-gray-800 mb-4">Verify Your Identity</h2>
+              
+              <div className="relative mb-6">
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  muted
+                  className="w-full h-auto rounded-lg border-2 border-gray-200"
+                  style={{ minHeight: '400px' }}
+                />
+                {isVerifying && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-white/70 rounded-lg">
+                    <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-emerald-500"></div>
+                  </div>
+                )}
+              </div>
+
+              <p className="text-center text-lg mb-6 min-h-8 font-medium text-gray-700">
+                {verificationStatus}
+              </p>
+
+              <div className="flex justify-center space-x-6">
+                {!isVerifying ? (
+                  <>  
+                    <button
+                      onClick={verifyIdentity}
+                      className="px-8 py-3 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 text-sm font-semibold transition-colors duration-200 shadow-md"
+                    >
+                      Verify Identity
+                    </button>
+                    <button
+                      onClick={() => {
+                        clearInterval(intervalRef.current);
+                        setShowFaceModal(false);
+                        stopCamera();
+                      }}
+                      className="px-8 py-3 bg-gray-500 text-white rounded-lg hover:bg-gray-600 text-sm font-semibold transition-colors duration-200 shadow-md"
+                    >
+                      Cancel
+                    </button>
+                  </>
+                ) : null}
+              </div>
             </div>
-          )}
+          </div>
         </div>
-
-        <p className="text-center text-lg mb-6 min-h-8 font-medium text-gray-700">
-          {verificationStatus}
-        </p>
-
-        <div className="flex justify-center space-x-6">
-          {!isVerifying ? (
-            <>  
-              <button
-                onClick={verifyIdentity}
-                className="px-8 py-3 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 text-sm font-semibold transition-colors duration-200 shadow-md"
-              >
-                Verify Identity
-              </button>
-              <button
-                onClick={() => {
-                  clearInterval(intervalRef.current);
-                  setShowFaceModal(false);
-                  stopCamera();
-                }}
-                className="px-8 py-3 bg-gray-500 text-white rounded-lg hover:bg-gray-600 text-sm font-semibold transition-colors duration-200 shadow-md"
-              >
-                Cancel
-              </button>
-            </>
-          ) : null}
-        </div>
-      </div>
-    </div>
-  </div>
-)}
+      )}
 
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-gray-800">Classes</h1>

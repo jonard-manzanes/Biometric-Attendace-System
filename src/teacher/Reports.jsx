@@ -280,7 +280,7 @@ const Reports = () => {
                   );
                   const attendanceSnap = await getDoc(attendanceRef);
                   
-                  if (attendanceSnap.exists() && teacherAttended) {
+                  if (attendanceSnap.exists()) {
                     const data = attendanceSnap.data() || {};
                     let timeIn = data.timeIn
                       ? typeof data.timeIn.toDate === "function"
@@ -315,15 +315,16 @@ const Reports = () => {
                       : false;
 
                     let status;
-                    if (validTimeIn && validTimeOut) {
+                    if (!teacherAttended) {
+                      status = "No Class (Teacher Absent)";
+                    } else if (excuseInfo?.status === "approved") {
+                      status = "Excused Absence";
+                    } else if (validTimeIn && validTimeOut) {
                       status = "Present";
                     } else if (validTimeIn) {
                       status = "Time In Only";
                     } else if (excuseInfo) {
-                      status =
-                        excuseInfo.status === "approved"
-                          ? "Excused Absence"
-                          : "Pending Excuse";
+                      status = "Pending Excuse";
                     } else {
                       status = "Absent";
                     }
@@ -338,7 +339,7 @@ const Reports = () => {
                       excuse: excuseInfo,
                       isValidTimeIn: validTimeIn,
                       isValidTimeOut: validTimeOut,
-                      teacherAttended: true
+                      teacherAttended
                     };
                   }
                 } catch (err) {
@@ -349,7 +350,7 @@ const Reports = () => {
                   timeIn: null,
                   timeOut: null,
                   verificationMethod: null,
-                  status: teacherAttendanceRecords[date] ? "No Class (Teacher Absent)" : "Absent",
+                  status: teacherAttendanceRecords[date] ? "Absent" : "No Class (Teacher Absent)",
                   excuse: null,
                   isValidTimeIn: false,
                   isValidTimeOut: false,
@@ -508,37 +509,37 @@ const Reports = () => {
     const presentCounts = dates.map((date) =>
       attendanceData.reduce((sum, student) => {
         const record = student.records.find((r) => r.date === date);
-        return sum + (record && record.status === "Present" && record.teacherAttended ? 1 : 0);
+        return sum + (record && record.status === "Present" ? 1 : 0);
       }, 0)
     );
     const timeInOnlyCounts = dates.map((date) =>
       attendanceData.reduce((sum, student) => {
         const record = student.records.find((r) => r.date === date);
-        return sum + (record && record.status === "Time In Only" && record.teacherAttended ? 1 : 0);
+        return sum + (record && record.status === "Time In Only" ? 1 : 0);
       }, 0)
     );
     const excusedCounts = dates.map((date) =>
       attendanceData.reduce((sum, student) => {
         const record = student.records.find((r) => r.date === date);
-        return sum + (record && record.status === "Excused Absence" && record.teacherAttended ? 1 : 0);
+        return sum + (record && record.status === "Excused Absence" ? 1 : 0);
       }, 0)
     );
     const pendingExcuseCounts = dates.map((date) =>
       attendanceData.reduce((sum, student) => {
         const record = student.records.find((r) => r.date === date);
-        return sum + (record && record.status === "Pending Excuse" && record.teacherAttended ? 1 : 0);
+        return sum + (record && record.status === "Pending Excuse" ? 1 : 0);
       }, 0)
     );
     const absentCounts = dates.map((date) =>
       attendanceData.reduce((sum, student) => {
         const record = student.records.find((r) => r.date === date);
-        return sum + (record && record.status === "Absent" && record.teacherAttended ? 1 : 0);
+        return sum + (record && record.status === "Absent" ? 1 : 0);
       }, 0)
     );
     const noClassCounts = dates.map((date) =>
       attendanceData.reduce((sum, student) => {
         const record = student.records.find((r) => r.date === date);
-        return sum + (record && !record.teacherAttended ? 1 : 0);
+        return sum + (record && record.status === "No Class (Teacher Absent)" ? 1 : 0);
       }, 0)
     );
 
@@ -548,32 +549,32 @@ const Reports = () => {
         {
           label: "Present",
           data: presentCounts,
-          backgroundColor: "green",
+          backgroundColor: "#10B981", // green-500
         },
         {
           label: "Time In Only",
           data: timeInOnlyCounts,
-          backgroundColor: "yellow",
+          backgroundColor: "#F59E0B", // amber-500
         },
         {
           label: "Excused Absence",
           data: excusedCounts,
-          backgroundColor: "blue",
+          backgroundColor: "#3B82F6", // blue-500
         },
         {
           label: "Pending Excuse",
           data: pendingExcuseCounts,
-          backgroundColor: "orange",
+          backgroundColor: "#F97316", // orange-500
         },
         {
           label: "Absent",
           data: absentCounts,
-          backgroundColor: "red",
+          backgroundColor: "#EF4444", // red-500
         },
         {
           label: "No Class (Teacher Absent)",
           data: noClassCounts,
-          backgroundColor: "gray",
+          backgroundColor: "#6B7280", // gray-500
         },
       ],
     };
@@ -894,6 +895,15 @@ const Reports = () => {
                           font: {
                             size: 16
                           }
+                        },
+                        tooltip: {
+                          callbacks: {
+                            afterLabel: function(context) {
+                              const totalStudents = attendanceData.length;
+                              const percentage = ((context.raw / totalStudents) * 100).toFixed(1);
+                              return `${percentage}% of students`;
+                            }
+                          }
                         }
                       },
                       scales: {
@@ -905,7 +915,12 @@ const Reports = () => {
                           beginAtZero: true,
                           max: attendanceData.length,
                           ticks: {
-                            stepSize: 1
+                            stepSize: 1,
+                            callback: function(value) {
+                              if (value % 1 === 0) {
+                                return value;
+                              }
+                            }
                           }
                         }
                       },

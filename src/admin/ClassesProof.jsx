@@ -19,10 +19,17 @@ const ClassesProof = () => {
 
         const classesWithVerifications = await Promise.all(
           allClasses.map(async (cls) => {
-            // Filter verifications for the selected date
-            const verifications = cls.verifications?.filter(v => v.date === selectedDate) || [];
+            // Get all verifications for this class
+            const verifications = cls.verifications || [];
             
-            if (verifications.length === 0) return null;
+            // Filter verifications for the selected date
+            const filteredVerifications = verifications.filter(v => {
+              // Check both date and day fields to be more flexible
+              return v.date === selectedDate || 
+                     (v.day && new Date(selectedDate).toLocaleString('en-US', { weekday: 'long' }) === v.day);
+            });
+
+            if (filteredVerifications.length === 0) return null;
 
             // Get teacher details
             let teacherName = "Unknown Teacher";
@@ -34,12 +41,13 @@ const ClassesProof = () => {
               }
             }
 
-            return verifications.map(verification => ({
+            return filteredVerifications.map(verification => ({
               classId: cls.id,
               subjectName: cls.subjectName,
               joinCode: cls.joinCode,
               teacherName,
-              verification
+              verification,
+              schedule: cls.schedule?.find(s => s.day === verification.day) // Get the full schedule for the day
             }));
           })
         );
@@ -71,6 +79,21 @@ const ClassesProof = () => {
     return new Date(dateString).toLocaleDateString(undefined, options);
   };
 
+  const formatTimeTo12Hour = (timeStr) => {
+    if (!timeStr) return "";
+    
+    // Handle existing 12-hour format
+    if (timeStr.includes("AM") || timeStr.includes("PM")) {
+      return timeStr;
+    }
+
+    // Handle 24-hour format (HH:MM)
+    const [hours, minutes] = timeStr.split(':').map(Number);
+    const period = hours >= 12 ? 'PM' : 'AM';
+    const hours12 = hours % 12 || 12; // Convert 0 to 12 for 12AM
+    return `${hours12}:${minutes.toString().padStart(2, '0')} ${period}`;
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -83,8 +106,8 @@ const ClassesProof = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className=" mx-auto">
+    <div className="min-h-screen bg-gray-50 p-4 sm:p-6">
+      <div className="max-w-7xl mx-auto">
         <div className="bg-white rounded-xl shadow-md p-6 mb-8">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
@@ -164,24 +187,34 @@ const ClassesProof = () => {
                 <div className="border-t border-gray-200 p-4 bg-gray-50">
                   <div className="mb-3">
                     <h4 className="text-sm font-medium text-gray-700 mb-1">Verification Proof</h4>
-                    <a 
-                      href={item.verification.imageUrl} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="block"
-                    >
-                      <img 
-                        src={item.verification.imageUrl} 
-                        alt={`Proof for ${item.subjectName}`}
-                        className="w-full h-40 object-cover rounded-lg border border-gray-300 hover:shadow-md transition-shadow"
-                      />
-                    </a>
+                    {item.verification.imageUrl ? (
+                      <a 
+                        href={item.verification.imageUrl} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="block"
+                      >
+                        <img 
+                          src={item.verification.imageUrl} 
+                          alt={`Proof for ${item.subjectName}`}
+                          className="w-full h-40 object-cover rounded-lg border border-gray-300 hover:shadow-md transition-shadow"
+                          onError={(e) => {
+                            e.target.onerror = null; 
+                            e.target.src = 'https://via.placeholder.com/300x200?text=Image+Not+Available';
+                          }}
+                        />
+                      </a>
+                    ) : (
+                      <div className="w-full h-40 bg-gray-100 rounded-lg border border-gray-300 flex items-center justify-center text-gray-500">
+                        No proof image available
+                      </div>
+                    )}
                   </div>
                   
                   <div className="text-xs text-gray-500">
                     <p>Verified at: {new Date(item.verification.verifiedAt).toLocaleString()}</p>
-                    {item.verification.schedule && (
-                      <p>Class time: {item.verification.schedule.start} - {item.verification.schedule.end}</p>
+                    {item.schedule && (
+                      <p>Class time: {formatTimeTo12Hour(item.schedule.start)} - {formatTimeTo12Hour(item.schedule.end)}</p>
                     )}
                   </div>
                 </div>
