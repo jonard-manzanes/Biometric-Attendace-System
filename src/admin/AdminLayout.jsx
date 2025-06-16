@@ -1,5 +1,21 @@
 import React, { useState, useEffect } from "react";
-import { Bell, Home, CalendarCheck, User, LogOut, Menu, Users, FileText, BarChart2, Shield } from "lucide-react";
+import {
+  Bell,
+  Home,
+  CalendarCheck,
+  User,
+  LogOut,
+  Menu,
+  Users,
+  FileText,
+  BarChart2,
+  Shield,
+  Key,
+  ClipboardList,
+  FileSpreadsheet,
+  UserCog,
+  FileSearch
+} from "lucide-react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../firebaseConfig";
@@ -20,32 +36,32 @@ export default function AdminLayout() {
     const fetchProfileData = async () => {
       setLoading(true);
       try {
-        const storedUser = localStorage.getItem('user');
+        const storedUser = localStorage.getItem("user");
         if (!storedUser) {
-          setError('No user data found. Please login again.');
+          setError("No user data found. Please login again.");
           setLoading(false);
           return;
         }
 
         const parsedUser = JSON.parse(storedUser);
         if (!parsedUser.docId) {
-          setError('Missing document ID. Please login again.');
+          setError("Missing document ID. Please login again.");
           setLoading(false);
           return;
         }
 
-        const docRef = doc(db, 'users', parsedUser.docId);
+        const docRef = doc(db, "users", parsedUser.docId);
         const docSnap = await getDoc(docRef);
 
         if (docSnap.exists()) {
           const data = docSnap.data();
           setProfileData(data);
         } else {
-          setError('No profile data found for this user.');
+          setError("No profile data found for this user.");
         }
       } catch (error) {
-        console.error('Error getting document:', error);
-        setError('Error fetching profile data.');
+        console.error("Error getting document:", error);
+        setError("Error fetching profile data.");
       } finally {
         setLoading(false);
       }
@@ -87,10 +103,14 @@ export default function AdminLayout() {
   };
 
   const getUserInitials = () => {
-    if (!profileData) return 'S';
-    const firstInitial = profileData.firstName ? profileData.firstName.charAt(0) : '';
-    const lastInitial = profileData.lastName ? profileData.lastName.charAt(0) : '';
-    return `${firstInitial}${lastInitial}`.toUpperCase() || 'S';
+    if (!profileData) return "S";
+    const firstInitial = profileData.firstName
+      ? profileData.firstName.charAt(0)
+      : "";
+    const lastInitial = profileData.lastName
+      ? profileData.lastName.charAt(0)
+      : "";
+    return `${firstInitial}${lastInitial}`.toUpperCase() || "S";
   };
 
   return (
@@ -113,8 +133,12 @@ export default function AdminLayout() {
             {sidebarOpen ? (
               <>
                 <div>
-                  <h1 className="text-xl font-bold text-emerald-200">BIO-TRACK</h1>
-                  <p className="text-sm opacity-75">Biometric Attendance System</p>
+                  <h1 className="text-xl font-bold text-emerald-200">
+                    BIO-TRACK
+                  </h1>
+                  <p className="text-sm opacity-75">
+                    Biometric Attendance System
+                  </p>
                 </div>
                 <button
                   onClick={toggleSidebar}
@@ -142,22 +166,31 @@ export default function AdminLayout() {
               sidebarOpen={sidebarOpen}
             />
             <SidebarLink
-              icon={<Users size={20} />}
+              icon={<UserCog size={20} />}
               text="User Management"
               active={currentPage === "user-management"}
               onClick={() => handleNavigate("user-management")}
               sidebarOpen={sidebarOpen}
             />
-            
+
             <SidebarLink
-              icon={<FileText size={20} />}
+              icon={<ClipboardList size={20} />}
+              text="Class Proofs"
+              active={currentPage === "tasking-staff"}
+              onClick={() => handleNavigate("tasking-staff")}
+              sidebarOpen={sidebarOpen}
+            />
+
+            <SidebarLink
+              icon={<Key size={20} />}
               text="Code"
               active={currentPage === "access-codes"}
               onClick={() => handleNavigate("access-codes")}
               sidebarOpen={sidebarOpen}
             />
+
             <SidebarLink
-              icon={<BarChart2 size={20} />}
+              icon={<FileSearch size={20} />}
               text="Reports"
               active={currentPage === "reports"}
               onClick={() => handleNavigate("reports")}
@@ -178,7 +211,9 @@ export default function AdminLayout() {
       </div>
 
       {/* Main Content */}
-      <div className={`flex-1 ${!sidebarOpen && "md:ml-0"} transition-all duration-300 ease-in-out`}>
+      <div
+        className={`flex-1 ${!sidebarOpen && "md:ml-0"} transition-all duration-300 ease-in-out`}
+      >
         <header className="bg-white shadow-sm">
           <div className="flex justify-between items-center px-4 md:px-6 py-3">
             <div className="flex items-center">

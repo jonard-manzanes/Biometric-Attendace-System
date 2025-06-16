@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { db } from "../firebaseConfig";
-import { collection, getDocs, doc, getDoc, updateDoc } from "firebase/firestore";
+import { collection, getDocs, doc, getDoc, updateDoc, query, where } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
 import Swal from "sweetalert2";
 
@@ -12,26 +12,25 @@ const StaffPage = () => {
   const [imagePreview, setImagePreview] = useState(null);
   const [timeError, setTimeError] = useState(null);
   const [staffDepartment, setStaffDepartment] = useState(null);
+  const [staffId, setStaffId] = useState(null);
+  const [assignedClasses, setAssignedClasses] = useState([]);
   const navigate = useNavigate();
 
   // Convert time to 12-hour format with AM/PM
   const formatTimeTo12Hour = (timeStr) => {
     if (!timeStr) return "";
     
-    // Handle existing 12-hour format
     if (timeStr.includes("AM") || timeStr.includes("PM")) {
       return timeStr;
     }
 
-    // Handle 24-hour format (HH:MM)
     const [hours, minutes] = timeStr.split(':').map(Number);
     const period = hours >= 12 ? 'PM' : 'AM';
-    const hours12 = hours % 12 || 12; // Convert 0 to 12 for 12AM
+    const hours12 = hours % 12 || 12;
     return `${hours12}:${minutes.toString().padStart(2, '0')} ${period}`;
   };
 
   const timeToMinutes = (timeStr) => {
-    // If already in 12-hour format
     if (timeStr.includes("AM") || timeStr.includes("PM")) {
       const [time, period] = timeStr.split(' ');
       const [hours, minutes] = time.split(':').map(Number);
@@ -41,7 +40,6 @@ const StaffPage = () => {
       return total;
     }
     
-    // If in 24-hour format
     const [hours, minutes] = timeStr.split(':').map(Number);
     return hours * 60 + minutes;
   };
@@ -60,16 +58,38 @@ const StaffPage = () => {
 
   useEffect(() => {
     const user = JSON.parse(localStorage.getItem('user'));
-    if (user && user.department) {
+    if (user) {
       setStaffDepartment(user.department);
+      setStaffId(user.docId);
     } else {
       setClassesToday([]);
     }
   }, []);
 
   useEffect(() => {
+    const fetchAssignedClasses = async () => {
+      if (!staffId) return;
+
+      const currentDate = new Date().toISOString().split('T')[0];
+      const q = query(
+        collection(db, "verificationTasks"),
+        where("staffId", "==", staffId),
+        where("date", "==", currentDate)
+      );
+
+      const querySnapshot = await getDocs(q);
+      const assigned = querySnapshot.docs.map(doc => doc.data().classId);
+      setAssignedClasses(assigned);
+    };
+
+    if (staffId) {
+      fetchAssignedClasses();
+    }
+  }, [staffId]);
+
+  useEffect(() => {
     const fetchClassesToday = async () => {
-      if (!staffDepartment) return;
+      if (!staffDepartment || !staffId) return;
 
       const today = new Date().toLocaleString("en-US", { weekday: "long" });
       const currentDate = new Date().toISOString().split('T')[0];
@@ -122,13 +142,18 @@ const StaffPage = () => {
         })
       );
 
-      setClassesToday(classesWithTeacher.filter(cls => cls !== null));
+      // Filter to only show classes assigned to this staff member
+      const filteredClasses = classesWithTeacher
+        .filter(cls => cls !== null)
+        .filter(cls => assignedClasses.includes(cls.id));
+
+      setClassesToday(filteredClasses);
     };
 
-    if (staffDepartment) {
+    if (staffDepartment && staffId) {
       fetchClassesToday();
     }
-  }, [staffDepartment]);
+  }, [staffDepartment, staffId, assignedClasses]);
 
   const handleImageChange = (e) => {
     const file = e.target.files[0];
@@ -233,7 +258,8 @@ const StaffPage = () => {
   });
 
   const ClassCard = ({ cls }) => {
-    const canVerify = !cls.verification && isWithinClassTime(cls.schedule.start, cls.schedule.end);
+    const isAssigned = assignedClasses.includes(cls.id);
+    const canVerify = isAssigned && !cls.verification && isWithinClassTime(cls.schedule.start, cls.schedule.end);
     const displayStartTime = formatTimeTo12Hour(cls.schedule.start);
     const displayEndTime = formatTimeTo12Hour(cls.schedule.end);
     
@@ -246,6 +272,10 @@ const StaffPage = () => {
             {cls.verification ? (
               <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
                 Verified
+              </span>
+            ) : !isAssigned ? (
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                Not Assigned
               </span>
             ) : null}
           </div>
@@ -302,20 +332,24 @@ const StaffPage = () => {
             )
           ) : (
             <button 
-              onClick={() => setSelectedClass(cls)}
+              onClick={() => isAssigned && setSelectedClass(cls)}
               disabled={!canVerify}
               className={`w-full flex items-center justify-center px-4 py-2 rounded-md transition-colors duration-200 ${
                 canVerify 
                   ? "bg-emerald-600 hover:bg-emerald-700 text-white" 
-                  : "bg-gray-200 text-gray-500 cursor-not-allowed"
+                  : isAssigned
+                    ? "bg-gray-200 text-gray-500 cursor-not-allowed"
+                    : "bg-gray-100 text-gray-400 cursor-not-allowed"
               }`}
-              title={!canVerify ? `You can only verify this class between ${displayStartTime} and ${displayEndTime}` : ""}
+              title={!isAssigned ? "This class is not assigned to you" : 
+                     !canVerify ? `You can only verify this class between ${displayStartTime} and ${displayEndTime}` : ""}
             >
               <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
-              {canVerify ? "Verify Class" : "Not Available"}
+              {canVerify ? "Verify Class" : 
+               isAssigned ? "Not Available" : "Not Assigned"}
             </button>
           )}
         </div>
@@ -330,8 +364,11 @@ const StaffPage = () => {
         <div className="flex flex-col md:flex-row md:justify-between md:items-center">
           <div className="mb-4 md:mb-0">
             <h1 className="text-2xl font-bold text-emerald-700 mb-2">
-              {staffDepartment ? `${staffDepartment} Classes` : "Today's Classes"}
+              {staffDepartment ? `Your Assigned ${staffDepartment} Classes` : "Today's Classes"}
             </h1>
+            <p className="text-sm text-gray-600">
+              You can only verify classes that have been assigned to you
+            </p>
           </div>
           <div className="text-right">
             <p className="text-lg font-medium text-gray-800">{todayDate}</p>
@@ -450,8 +487,8 @@ const StaffPage = () => {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
             </svg>
           </div>
-          <h3 className="text-xl font-semibold text-gray-800 mb-2">No Classes Today</h3>
-          <p className="text-gray-600">No classes are scheduled for today in your department.</p>
+          <h3 className="text-xl font-semibold text-gray-800 mb-2">No Classes Assigned to You Today</h3>
+          <p className="text-gray-600">No classes have been assigned to you for today.</p>
         </div>
       ) : (
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">

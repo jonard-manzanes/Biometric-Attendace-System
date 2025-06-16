@@ -23,6 +23,7 @@ import UserManagement from "./admin/UserManagement";
 import Reports from "./admin/Reports";
 import AccessCodes from "./admin/AccessCodes";
 import QuickAttendance from "./auth/quickAttendance";
+import TaskingStaff from "./admin/TaskingStaff";
 
 import StaffLayout from "./staff/StaffLayout";
 import VerifyClasses from "./staff/VerifyClasses";
@@ -87,6 +88,7 @@ function App() {
           <Route path="dashboard" element={<AdminDashboard />} />
           <Route path="user-management" element={<UserManagement />} />
           <Route path="access-codes" element={<AccessCodes />} />
+          <Route path="tasking-staff" element={<TaskingStaff />} />
           <Route path="reports" element={<Reports />} />
         </Route>
 

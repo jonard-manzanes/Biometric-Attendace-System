@@ -55,7 +55,8 @@ const UserManagement = () => {
         user.lastName?.toLowerCase().includes(term) ||
         user.email?.toLowerCase().includes(term) ||
         user.role?.toLowerCase().includes(term)
-  )}
+      );
+    }
     
     // Apply sorting
     if (sortConfig.key) {
@@ -89,8 +90,36 @@ const UserManagement = () => {
     setExpandedUser(expandedUser === userId ? null : userId);
   };
 
+  // Check if role change is allowed
+  const isRoleChangeAllowed = (currentRole, newRole) => {
+    // Define allowed role transitions
+    const allowedTransitions = {
+      student: ['instructor', 'staff'],
+      instructor: ['student'],  // Only allow instructor to become student
+      staff: [],                // Staff cannot be changed to other roles
+      admin: []                 // Admin cannot be changed to other roles
+    };
+
+    // If current role is not in the list, assume no restrictions
+    if (!allowedTransitions[currentRole]) return true;
+    
+    // Check if the new role is in the allowed transitions
+    return allowedTransitions[currentRole].includes(newRole);
+  };
+
   // Handle role change
   const handleRoleChange = async (userId, newRole) => {
+    const user = users.find(u => u.id === userId);
+    if (!user) return;
+
+    const currentRole = user.role || 'student';
+    
+    // Check if the transition is allowed
+    if (!isRoleChangeAllowed(currentRole, newRole)) {
+      setError(`Role change from ${currentRole} to ${newRole} is not allowed.`);
+      return;
+    }
+
     try {
       await updateDoc(doc(db, 'users', userId), {
         role: newRole
@@ -99,6 +128,7 @@ const UserManagement = () => {
       setUsers(users.map(user => 
         user.id === userId ? { ...user, role: newRole } : user
       ));
+      setError('');
     } catch (err) {
       console.error('Error updating user role:', err);
       setError('Failed to update user role');
@@ -144,6 +174,67 @@ const UserManagement = () => {
 
   return (
     <div>
+      {/* Stats summary */}
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
+        <div className="bg-white overflow-hidden shadow rounded-lg">
+          <div className="px-4 py-5 sm:p-6">
+            <div className="flex items-center">
+              <div className="flex-shrink-0 bg-emerald-500 rounded-md p-3">
+                <User className="text-white" size={20} />
+              </div>
+              <div className="ml-5 w-0 flex-1">
+                <dl>
+                  <dt className="text-sm font-medium text-gray-500 truncate">Total Users</dt>
+                  <dd className="flex items-baseline">
+                    <div className="text-2xl font-semibold text-gray-900">{users.length}</div>
+                  </dd>
+                </dl>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div className="bg-white overflow-hidden shadow rounded-lg">
+          <div className="px-4 py-5 sm:p-6">
+            <div className="flex items-center">
+              <div className="flex-shrink-0 bg-blue-500 rounded-md p-3">
+                <Shield className="text-white" size={20} />
+              </div>
+              <div className="ml-5 w-0 flex-1">
+                <dl>
+                  <dt className="text-sm font-medium text-gray-500 truncate">Admins</dt>
+                  <dd className="flex items-baseline">
+                    <div className="text-2xl font-semibold text-gray-900">
+                      {users.filter(u => u.role === 'admin').length}
+                    </div>
+                  </dd>
+                </dl>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div className="bg-white overflow-hidden shadow rounded-lg">
+          <div className="px-4 py-5 sm:p-6">
+            <div className="flex items-center">
+              <div className="flex-shrink-0 bg-purple-500 rounded-md p-3">
+                <User className="text-white" size={20} />
+              </div>
+              <div className="ml-5 w-0 flex-1">
+                <dl>
+                  <dt className="text-sm font-medium text-gray-500 truncate">Instructors</dt>
+                  <dd className="flex items-baseline">
+                    <div className="text-2xl font-semibold text-gray-900">
+                      {users.filter(u => u.role === 'instructor').length}
+                    </div>
+                  </dd>
+                </dl>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div className="bg-white p-4 rounded-lg shadow-sm mb-6">
         <div className="relative max-w-md">
           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -235,7 +326,8 @@ const UserManagement = () => {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
                           user.role === 'admin' ? 'bg-purple-100 text-purple-800' :
-                          user.role === 'teacher' ? 'bg-blue-100 text-blue-800' :
+                          user.role === 'instructor' ? 'bg-blue-100 text-blue-800' :
+                          user.role === 'staff' ? 'bg-yellow-100 text-yellow-800' :
                           'bg-green-100 text-green-800'
                         }`}>
                           {user.role || 'student'}
@@ -279,12 +371,25 @@ const UserManagement = () => {
                                   onChange={(e) => handleRoleChange(user.id, e.target.value)}
                                   className="block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm rounded-md"
                                 >
-                                  <option value="admin">Admin</option>
-                                  <option value="teacher">Teacher</option>
-                                  <option value="student">Student</option>
+                                  {(!user.role || user.role === 'student') && (
+                                    <>
+                                      <option value="student">Student</option>
+                                      <option value="instructor">Instructor</option>
+                                      <option value="staff">Staff</option>
+                                    </>
+                                  )}
+                                  {user.role === 'instructor' && (
+                                    <option value="student">Student</option>
+                                  )}
+                                  {user.role === 'admin' && (
+                                    <option value="admin">Admin (cannot be changed)</option>
+                                  )}
+                                  {user.role === 'staff' && (
+                                    <option value="staff">Staff (cannot be changed)</option>
+                                  )}
                                 </select>
                                 <button
-                                  onClick={() => setEditingUserId(null)}
+                                  onClick={() => setExpandedUser(null)}
                                   className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500"
                                 >
                                   Cancel
@@ -300,67 +405,6 @@ const UserManagement = () => {
               )}
             </tbody>
           </table>
-        </div>
-      </div>
-      
-      {/* Stats summary */}
-      <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-3">
-        <div className="bg-white overflow-hidden shadow rounded-lg">
-          <div className="px-4 py-5 sm:p-6">
-            <div className="flex items-center">
-              <div className="flex-shrink-0 bg-emerald-500 rounded-md p-3">
-                <User className="text-white" size={20} />
-              </div>
-              <div className="ml-5 w-0 flex-1">
-                <dl>
-                  <dt className="text-sm font-medium text-gray-500 truncate">Total Users</dt>
-                  <dd className="flex items-baseline">
-                    <div className="text-2xl font-semibold text-gray-900">{users.length}</div>
-                  </dd>
-                </dl>
-              </div>
-            </div>
-          </div>
-        </div>
-        
-        <div className="bg-white overflow-hidden shadow rounded-lg">
-          <div className="px-4 py-5 sm:p-6">
-            <div className="flex items-center">
-              <div className="flex-shrink-0 bg-blue-500 rounded-md p-3">
-                <Shield className="text-white" size={20} />
-              </div>
-              <div className="ml-5 w-0 flex-1">
-                <dl>
-                  <dt className="text-sm font-medium text-gray-500 truncate">Admins</dt>
-                  <dd className="flex items-baseline">
-                    <div className="text-2xl font-semibold text-gray-900">
-                      {users.filter(u => u.role === 'admin').length}
-                    </div>
-                  </dd>
-                </dl>
-              </div>
-            </div>
-          </div>
-        </div>
-        
-        <div className="bg-white overflow-hidden shadow rounded-lg">
-          <div className="px-4 py-5 sm:p-6">
-            <div className="flex items-center">
-              <div className="flex-shrink-0 bg-purple-500 rounded-md p-3">
-                <User className="text-white" size={20} />
-              </div>
-              <div className="ml-5 w-0 flex-1">
-                <dl>
-                  <dt className="text-sm font-medium text-gray-500 truncate">Teachers</dt>
-                  <dd className="flex items-baseline">
-                    <div className="text-2xl font-semibold text-gray-900">
-                      {users.filter(u => u.role === 'teacher').length}
-                    </div>
-                  </dd>
-                </dl>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
     </div>
