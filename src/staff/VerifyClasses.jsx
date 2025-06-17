@@ -6,14 +6,17 @@ import Swal from "sweetalert2";
 
 const StaffPage = () => {
   const [classesToday, setClassesToday] = useState([]);
+  const [filteredClasses, setFilteredClasses] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [selectedClass, setSelectedClass] = useState(null);
   const [image, setImage] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
   const [timeError, setTimeError] = useState(null);
-  const [staffDepartment, setStaffDepartment] = useState(null);
   const [staffId, setStaffId] = useState(null);
   const [assignedClasses, setAssignedClasses] = useState([]);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [searchFilter, setSearchFilter] = useState("all"); // 'all', 'subject', 'teacher', 'department'
+  const [verificationFilter, setVerificationFilter] = useState("all"); // 'all', 'verified', 'unverified'
   const navigate = useNavigate();
 
   // Convert time to 12-hour format with AM/PM
@@ -59,7 +62,6 @@ const StaffPage = () => {
   useEffect(() => {
     const user = JSON.parse(localStorage.getItem('user'));
     if (user) {
-      setStaffDepartment(user.department);
       setStaffId(user.docId);
     } else {
       setClassesToday([]);
@@ -89,7 +91,7 @@ const StaffPage = () => {
 
   useEffect(() => {
     const fetchClassesToday = async () => {
-      if (!staffDepartment || !staffId) return;
+      if (!staffId) return;
 
       const today = new Date().toLocaleString("en-US", { weekday: "long" });
       const currentDate = new Date().toISOString().split('T')[0];
@@ -122,10 +124,6 @@ const StaffPage = () => {
             }
           }
 
-          if (teacherDepartment !== staffDepartment) {
-            return null;
-          }
-
           const todayVerification = cls.verifications?.find(
             v => v.date === currentDate || v.day === today
           );
@@ -148,12 +146,48 @@ const StaffPage = () => {
         .filter(cls => assignedClasses.includes(cls.id));
 
       setClassesToday(filteredClasses);
+      setFilteredClasses(filteredClasses);
     };
 
-    if (staffDepartment && staffId) {
+    if (staffId) {
       fetchClassesToday();
     }
-  }, [staffDepartment, staffId, assignedClasses]);
+  }, [staffId, assignedClasses]);
+
+  // Apply filters whenever search term, filter type, or classes change
+  useEffect(() => {
+    let results = classesToday;
+    
+    // Apply verification filter
+    if (verificationFilter === 'verified') {
+      results = results.filter(cls => cls.verification);
+    } else if (verificationFilter === 'unverified') {
+      results = results.filter(cls => !cls.verification);
+    }
+    
+    // Apply search filter if there's a search term
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      results = results.filter(cls => {
+        if (searchFilter === 'subject') {
+          return cls.subjectName.toLowerCase().includes(term);
+        } else if (searchFilter === 'teacher') {
+          return cls.teacherName.toLowerCase().includes(term);
+        } else if (searchFilter === 'department') {
+          return cls.teacherDepartment?.toLowerCase().includes(term);
+        } else { // 'all'
+          return (
+            cls.subjectName.toLowerCase().includes(term) ||
+            cls.teacherName.toLowerCase().includes(term) ||
+            cls.teacherDepartment?.toLowerCase().includes(term) ||
+            cls.joinCode?.toLowerCase().includes(term)
+          );
+        }
+      });
+    }
+    
+    setFilteredClasses(results);
+  }, [searchTerm, searchFilter, verificationFilter, classesToday]);
 
   const handleImageChange = (e) => {
     const file = e.target.files[0];
@@ -264,20 +298,29 @@ const StaffPage = () => {
     const displayEndTime = formatTimeTo12Hour(cls.schedule.end);
     
     return (
-      <div className="bg-white rounded-lg shadow-md overflow-hidden border border-gray-200 hover:shadow-lg transition-shadow duration-200">
+      <div className={`bg-white rounded-lg shadow-md overflow-hidden border hover:shadow-lg transition-shadow duration-200 ${
+        cls.verification ? "border-emerald-300" : "border-gray-200"
+      }`}>
         <div className="p-5">
           <div className="flex justify-between items-start mb-3">
             <h3 className="text-lg font-semibold text-gray-800">{cls.subjectName}</h3>
             
             {cls.verification ? (
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 border border-emerald-300">
+                <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                </svg>
                 Verified
               </span>
             ) : !isAssigned ? (
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 border border-gray-300">
                 Not Assigned
               </span>
-            ) : null}
+            ) : (
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 border border-yellow-300">
+                Unverified
+              </span>
+            )}
           </div>
 
           <div className="space-y-3">
@@ -364,7 +407,7 @@ const StaffPage = () => {
         <div className="flex flex-col md:flex-row md:justify-between md:items-center">
           <div className="mb-4 md:mb-0">
             <h1 className="text-2xl font-bold text-emerald-700 mb-2">
-              {staffDepartment ? `Your Assigned ${staffDepartment} Classes` : "Today's Classes"}
+              Your Assigned Classes
             </h1>
             <p className="text-sm text-gray-600">
               You can only verify classes that have been assigned to you
@@ -376,6 +419,63 @@ const StaffPage = () => {
           </div>
         </div>
       </div>
+      
+      {/* Search and Filter Section */}
+<div className="bg-white rounded-xl shadow-md p-6 mb-8">
+  <div className="flex flex-col md:flex-row gap-4 items-end">
+    {/* Search Input - now with a label for proper alignment */}
+    <div className="flex-1 w-full">
+      <label htmlFor="class-search" className="block text-sm font-medium text-gray-700 mb-1 invisible">Search</label>
+      <div className="relative">
+        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+          <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+        </div>
+        <input
+          id="class-search"
+          type="text"
+          placeholder="Search classes..."
+          className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg bg-gray-50 focus:ring-emerald-500 focus:border-emerald-500"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+        />
+      </div>
+    </div>
+    
+    {/* Search Filter and Status */}
+    <div className="flex flex-col sm:flex-row gap-4 w-full md:w-auto">
+      <div className="flex-1 min-w-[150px]">
+        <label htmlFor="search-filter" className="block text-sm font-medium text-gray-700 mb-1">Search by</label>
+        <select
+          id="search-filter"
+          className="block w-full pl-3 pr-10 py-2 text-base border border-gray-300 focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm rounded-lg"
+          value={searchFilter}
+          onChange={(e) => setSearchFilter(e.target.value)}
+        >
+          <option value="all">All</option>
+          <option value="subject">Subject</option>
+          <option value="teacher">Teacher</option>
+          <option value="department">Department</option>
+        </select>
+      </div>
+      
+      <div className="flex-1 min-w-[150px]">
+        <label htmlFor="verification-filter" className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+        <select
+          id="verification-filter"
+          className="block w-full pl-3 pr-10 py-2 text-base border border-gray-300 focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm rounded-lg"
+          value={verificationFilter}
+          onChange={(e) => setVerificationFilter(e.target.value)}
+        >
+          <option value="all">All</option>
+          <option value="verified">Verified</option>
+          <option value="unverified">Unverified</option>
+        </select>
+      </div>
+    </div>
+  </div>
+</div>
       
       {/* Verification Modal */}
       {selectedClass && (
@@ -470,29 +570,27 @@ const StaffPage = () => {
       )}
       
       {/* Class Cards Grid */}
-      {!staffDepartment ? (
-        <div className="bg-white rounded-xl shadow-md p-12 text-center">
-          <div className="w-24 h-24 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6">
-            <svg className="w-12 h-12 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-            </svg>
-          </div>
-          <h3 className="text-xl font-semibold text-gray-800 mb-2">Department Not Assigned</h3>
-          <p className="text-gray-600">Please contact admin to assign you to a department.</p>
-        </div>
-      ) : classesToday.length === 0 ? (
+      {filteredClasses.length === 0 ? (
         <div className="bg-white rounded-xl shadow-md p-12 text-center">
           <div className="w-24 h-24 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6">
             <svg className="w-12 h-12 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
             </svg>
           </div>
-          <h3 className="text-xl font-semibold text-gray-800 mb-2">No Classes Assigned to You Today</h3>
-          <p className="text-gray-600">No classes have been assigned to you for today.</p>
+          <h3 className="text-xl font-semibold text-gray-800 mb-2">
+            {classesToday.length === 0 
+              ? "No Classes Assigned to You Today" 
+              : "No Classes Match Your Search"}
+          </h3>
+          <p className="text-gray-600">
+            {classesToday.length === 0 
+              ? "No classes have been assigned to you for today." 
+              : "Try adjusting your search or filter criteria."}
+          </p>
         </div>
       ) : (
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {classesToday.map((cls, idx) => (
+          {filteredClasses.map((cls, idx) => (
             <ClassCard key={cls.id || idx} cls={cls} />
           ))}
         </div>

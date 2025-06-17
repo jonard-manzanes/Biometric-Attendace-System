@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebaseConfig';
 import { collection, getCountFromServer, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
-import { Users, Book, Clock, Activity, TrendingUp } from 'lucide-react';
-import { Bar, Line } from 'react-chartjs-2';
+import { Users, Book, Clock, Activity, TrendingUp, Shield, Calendar, Key } from 'lucide-react';
+import { Bar, Line, Pie } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -12,7 +12,8 @@ import {
   Tooltip,
   Legend,
   PointElement,
-  LineElement
+  LineElement,
+  ArcElement
 } from 'chart.js';
 
 ChartJS.register(
@@ -21,6 +22,7 @@ ChartJS.register(
   BarElement,
   PointElement,
   LineElement,
+  ArcElement,
   Title,
   Tooltip,
   Legend
@@ -32,23 +34,33 @@ const Dashboard = () => {
     totalClasses: 0,
     activeUsers: 0,
     recentSignups: 0,
-    activeClasses: 0
+    activeClasses: 0,
+    staffCount: 0,
+    instructorsCount: 0,
+    pendingTasks: 0
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [userGrowthData, setUserGrowthData] = useState([]);
   const [classesData, setClassesData] = useState([]);
+  const [roleDistribution, setRoleDistribution] = useState([]);
+  const [recentTasks, setRecentTasks] = useState([]);
+  const [currentInviteCode, setCurrentInviteCode] = useState('');
 
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
         const usersCol = collection(db, 'users');
         const classesCol = collection(db, 'classes');
+        const tasksCol = collection(db, 'verificationTasks');
+        const inviteCodesCol = collection(db, 'UniversityCode');
 
         // Basic counts
-        const [usersSnapshot, classesSnapshot] = await Promise.all([
+        const [usersSnapshot, classesSnapshot, staffSnapshot, instructorsSnapshot] = await Promise.all([
           getCountFromServer(usersCol),
-          getCountFromServer(classesCol)
+          getCountFromServer(classesCol),
+          getCountFromServer(query(usersCol, where('role', '==', 'staff'))),
+          getCountFromServer(query(usersCol, where('role', '==', 'instructor')))
         ]);
 
         // Active users (logged in last 30 days)
@@ -67,27 +79,63 @@ const Dashboard = () => {
         const activeClassesQuery = query(classesCol, where('studentIDs', '!=', []));
         const activeClassesSnapshot = await getCountFromServer(activeClassesQuery);
 
+        // Pending tasks
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const pendingTasksQuery = query(tasksCol, where('date', '==', formatDate(today)));
+        const pendingTasksSnapshot = await getCountFromServer(pendingTasksQuery);
+
+        // Role distribution
+        const roleCounts = await getRoleDistribution();
+
         // User growth data (last 6 months)
         const userGrowth = await getUserGrowthData();
-        setUserGrowthData(userGrowth);
 
         // Classes with teachers data
         const classesWithTeachers = await getClassesWithTeachers();
-        setClassesData(classesWithTeachers);
+
+        // Current invite code
+        const inviteCode = await getCurrentInviteCode();
 
         setStats({
           totalUsers: usersSnapshot.data().count,
           totalClasses: classesSnapshot.data().count,
           activeUsers: activeUsersSnapshot.data().count,
           recentSignups: recentSignupsSnapshot.data().count,
-          activeClasses: activeClassesSnapshot.data().count
+          activeClasses: activeClassesSnapshot.data().count,
+          staffCount: staffSnapshot.data().count,
+          instructorsCount: instructorsSnapshot.data().count,
+          pendingTasks: pendingTasksSnapshot.data().count
         });
+
+        setRoleDistribution(roleCounts);
+        setUserGrowthData(userGrowth);
+        setClassesData(classesWithTeachers);
+        setCurrentInviteCode(inviteCode);
+        setRecentTasks(await getRecentTasks());
       } catch (err) {
         console.error('Error fetching dashboard data:', err);
         setError('Failed to load dashboard data');
       } finally {
         setLoading(false);
       }
+    };
+
+    const formatDate = (date) => {
+      return date.toISOString().split('T')[0];
+    };
+
+    const getRoleDistribution = async () => {
+      const roles = ['student', 'instructor', 'staff', 'admin'];
+      const counts = await Promise.all(
+        roles.map(role => 
+          getCountFromServer(query(collection(db, 'users'), where('role', '==', role)))
+        )
+      );
+      return roles.map((role, i) => ({
+        role,
+        count: counts[i].data().count
+      }));
     };
 
     const getUserGrowthData = async () => {
@@ -154,6 +202,47 @@ const Dashboard = () => {
       });
     };
 
+    const getCurrentInviteCode = async () => {
+      try {
+        const querySnapshot = await getDocs(collection(db, 'UniversityCode'));
+        const codes = querySnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        
+        // Get the most recent active code
+        const now = new Date();
+        const activeCode = codes.find(code => 
+          !code.expiresAt || code.expiresAt.toDate() > now
+        );
+        
+        return activeCode?.InviteCode || activeCode?.inviteCode || activeCode?.code || 'N/A';
+      } catch (err) {
+        console.error('Error fetching invite code:', err);
+        return 'Error loading code';
+      }
+    };
+
+    const getRecentTasks = async () => {
+      try {
+        const today = new Date();
+        const q = query(
+          collection(db, 'verificationTasks'),
+          where('date', '>=', formatDate(today)),
+          where('date', '<=', formatDate(new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000)))
+        );
+        
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+      } catch (err) {
+        console.error('Error fetching recent tasks:', err);
+        return [];
+      }
+    };
+
     fetchDashboardData();
   }, []);
 
@@ -173,13 +262,35 @@ const Dashboard = () => {
   };
 
   const classesChart = {
-    labels: classesData.map(cls => cls.name),
+    labels: classesData.slice(0, 10).map(cls => cls.name),
     datasets: [
       {
         label: 'Students',
-        data: classesData.map(cls => cls.studentCount),
+        data: classesData.slice(0, 10).map(cls => cls.studentCount),
         backgroundColor: 'rgba(99, 102, 241, 0.7)',
         borderColor: 'rgba(99, 102, 241, 1)',
+        borderWidth: 1
+      }
+    ]
+  };
+
+  const roleDistributionChart = {
+    labels: roleDistribution.map(r => r.role),
+    datasets: [
+      {
+        data: roleDistribution.map(r => r.count),
+        backgroundColor: [
+          'rgba(16, 185, 129, 0.7)',
+          'rgba(59, 130, 246, 0.7)',
+          'rgba(245, 158, 11, 0.7)',
+          'rgba(139, 92, 246, 0.7)'
+        ],
+        borderColor: [
+          'rgba(16, 185, 129, 1)',
+          'rgba(59, 130, 246, 1)',
+          'rgba(245, 158, 11, 1)',
+          'rgba(139, 92, 246, 1)'
+        ],
         borderWidth: 1
       }
     ]
@@ -206,7 +317,7 @@ const Dashboard = () => {
       <h1 className="text-2xl font-bold text-gray-800">Admin Dashboard</h1>
       
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
         <StatCard 
           icon={<Users size={20} />}
           title="Total Users"
@@ -232,18 +343,26 @@ const Dashboard = () => {
         />
 
         <StatCard 
-          icon={<TrendingUp size={20} />}
-          title="User Growth"
-          value={stats.recentSignups}
-          change="new users this week"
-          color="pink"
+          icon={<Shield size={20} />}
+          title="Staff Members"
+          value={stats.staffCount}
+          change={`${stats.instructorsCount} instructors`}
+          color="amber"
+        />
+
+        <StatCard 
+          icon={<Key size={20} />}
+          title="Current Invite Code"
+          value={currentInviteCode}
+          change="For teacher registration"
+          color="indigo"
         />
       </div>
 
       {/* Charts Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* User Growth Chart */}
-        <div className="bg-white rounded-lg shadow-sm p-6">
+        <div className="bg-white rounded-lg shadow-sm p-6 lg:col-span-2">
           <h2 className="text-lg font-semibold text-gray-800 mb-4">User Growth (Last 6 Months)</h2>
           <div className="h-80">
             <Line 
@@ -273,10 +392,43 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* Classes Overview Chart */}
+        {/* Role Distribution Chart */}
         <div className="bg-white rounded-lg shadow-sm p-6">
-          <h2 className="text-lg font-semibold text-gray-800 mb-4">Classes Overview</h2>
-          <div className="h-96">
+          <h2 className="text-lg font-semibold text-gray-800 mb-4">User Role Distribution</h2>
+          <div className="h-80">
+            <Pie 
+              data={roleDistributionChart}
+              options={{
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: {
+                    position: 'right',
+                  },
+                  tooltip: {
+                    callbacks: {
+                      label: function(context) {
+                        const label = context.label || '';
+                        const value = context.raw || 0;
+                        const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                        const percentage = Math.round((value / total) * 100);
+                        return `${label}: ${value} (${percentage}%)`;
+                      }
+                    }
+                  }
+                }
+              }}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Second Row of Charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Classes Overview Chart */}
+        <div className="bg-white rounded-lg shadow-sm p-6 lg:col-span-2">
+          <h2 className="text-lg font-semibold text-gray-800 mb-4">Top Classes by Student Count</h2>
+          <div className="h-80">
             <Bar 
               data={classesChart}
               options={{
@@ -323,6 +475,34 @@ const Dashboard = () => {
             />
           </div>
         </div>
+
+        {/* Upcoming Tasks */}
+        <div className="bg-white rounded-lg shadow-sm p-6">
+          <h2 className="text-lg font-semibold text-gray-800 mb-4">Upcoming Verification Tasks</h2>
+          <div className="space-y-4">
+            {recentTasks.length > 0 ? (
+              recentTasks.map(task => (
+                <div key={task.id} className="p-3 border border-gray-200 rounded-lg">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="font-medium text-gray-800">
+                        {task.className || `Class ${task.classId?.substring(0, 6)}`}
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        {formatDate(new Date(task.date))}
+                      </p>
+                    </div>
+                    <span className="px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded-full">
+                      {task.staffName || 'Staff'}
+                    </span>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <p className="text-gray-500 text-center py-4">No upcoming tasks</p>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Recent Activity Section */}
@@ -342,10 +522,16 @@ const Dashboard = () => {
             color="purple"
           />
           <ActivityItem 
-            icon={<Clock size={16} />}
-            title={`${stats.activeUsers} active users in last 30 days`}
-            time="This month"
+            icon={<Calendar size={16} />}
+            title={`${stats.pendingTasks} verification tasks scheduled for today`}
+            time="Today"
             color="blue"
+          />
+          <ActivityItem 
+            icon={<Shield size={16} />}
+            title={`${stats.staffCount} staff members and ${stats.instructorsCount} instructors`}
+            time="Current"
+            color="amber"
           />
         </div>
       </div>
@@ -353,13 +539,14 @@ const Dashboard = () => {
   );
 };
 
-// StatCard component (unchanged)
+// StatCard component
 const StatCard = ({ icon, title, value, change, color }) => {
   const colorClasses = {
     emerald: 'bg-emerald-100 text-emerald-600',
     blue: 'bg-blue-100 text-blue-600',
     purple: 'bg-purple-100 text-purple-600',
-    pink: 'bg-pink-100 text-pink-600'
+    amber: 'bg-amber-100 text-amber-600',
+    indigo: 'bg-indigo-100 text-indigo-600'
   };
 
   return (
@@ -376,12 +563,13 @@ const StatCard = ({ icon, title, value, change, color }) => {
   );
 };
 
-// ActivityItem component (unchanged)
+// ActivityItem component
 const ActivityItem = ({ icon, title, time, color }) => {
   const colorClasses = {
     emerald: 'bg-emerald-100 text-emerald-600',
     blue: 'bg-blue-100 text-blue-600',
-    purple: 'bg-purple-100 text-purple-600'
+    purple: 'bg-purple-100 text-purple-600',
+    amber: 'bg-amber-100 text-amber-600'
   };
 
   return (
@@ -395,6 +583,15 @@ const ActivityItem = ({ icon, title, time, color }) => {
       </div>
     </div>
   );
+};
+
+// Helper function to format date
+const formatDate = (date) => {
+  return date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric'
+  });
 };
 
 export default Dashboard;

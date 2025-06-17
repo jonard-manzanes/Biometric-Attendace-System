@@ -35,6 +35,8 @@ import DepartmentLayout from "./departments/DepartmentLayout";
 import DepartmentDashboard from "./departments/Dashboard";
 import DepartmentInstrutor from "./departments/Instructors";
 import DepartmentReports from "./departments/Reports";
+import DepartmentTaskingStaff from "./departments/TaskingStaff";
+import DepartmentVerifiedClass from "./departments/VerifiedClass";
 
 
 function App() {
@@ -117,6 +119,8 @@ function App() {
           <Route path="dashboard" element={<DepartmentDashboard />} />
           <Route path="instructors" element={<DepartmentInstrutor />} />
           <Route path="reports" element={<DepartmentReports />} />
+          <Route path="tasking-staff" element={<DepartmentTaskingStaff />} />
+          <Route path="verified-classes" element={<DepartmentVerifiedClass />} />
         </Route>
         
 

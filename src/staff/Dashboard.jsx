@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { db } from "../firebaseConfig";
-import { collection, getDocs, doc, getDoc } from "firebase/firestore";
+import { collection, getDocs, doc, getDoc, query, where } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
 
 const Dashboard = () => {
@@ -9,7 +9,6 @@ const Dashboard = () => {
     verifiedClasses: 0,
     pendingVerification: 0,
     verificationRate: 0,
-    department: ""
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -19,7 +18,7 @@ const Dashboard = () => {
     const fetchVerificationStats = async () => {
       try {
         const user = JSON.parse(localStorage.getItem('user'));
-        if (!user || !user.department) {
+        if (!user) {
           navigate('/login');
           return;
         }
@@ -27,25 +26,25 @@ const Dashboard = () => {
         const today = new Date().toLocaleString("en-US", { weekday: "long" });
         const currentDate = new Date().toISOString().split('T')[0];
         
-        // Get all classes
+        // Get all classes assigned to this staff member
+        const assignmentsQuery = query(
+          collection(db, "verificationTasks"),
+          where("staffId", "==", user.docId),
+          where("date", "==", currentDate)
+        );
+        
+        const assignmentsSnapshot = await getDocs(assignmentsQuery);
+        const assignedClassIds = assignmentsSnapshot.docs.map(doc => doc.data().classId);
+
+        // Get all assigned classes
         const snapshot = await getDocs(collection(db, "classes"));
-        const classesWithTeacher = await Promise.all(
+        const classesWithVerification = await Promise.all(
           snapshot.docs.map(async (docRef) => {
+            if (!assignedClassIds.includes(docRef.id)) return null;
+            
             const cls = docRef.data();
             const todaySchedule = cls.schedule?.find((s) => s.day === today);
             if (!todaySchedule) return null;
-
-            let teacherDepartment = null;
-            if (cls.teacherID) {
-              const teacherDoc = await getDoc(doc(db, "users", cls.teacherID));
-              if (teacherDoc.exists()) {
-                teacherDepartment = teacherDoc.data().department;
-              }
-            }
-
-            if (teacherDepartment !== user.department) {
-              return null;
-            }
 
             const todayVerification = cls.verifications?.find(
               v => v.date === currentDate || v.day === today
@@ -60,7 +59,7 @@ const Dashboard = () => {
           })
         );
 
-        const todayClasses = classesWithTeacher.filter(cls => cls !== null);
+        const todayClasses = classesWithVerification.filter(cls => cls !== null);
         const verifiedCount = todayClasses.filter(cls => cls.verification).length;
 
         setStats({
@@ -69,7 +68,6 @@ const Dashboard = () => {
           pendingVerification: todayClasses.length - verifiedCount,
           verificationRate: todayClasses.length ? 
             Math.round((verifiedCount / todayClasses.length) * 100) : 0,
-          department: user.department
         });
 
       } catch (err) {
@@ -113,7 +111,7 @@ const Dashboard = () => {
         <div className="flex flex-col md:flex-row md:justify-between md:items-center">
           <div className="mb-4 md:mb-0">
             <h1 className="text-2xl font-bold text-emerald-700 mb-2">
-              {stats.department} Verification Dashboard
+              Your Verification Dashboard
             </h1>
             <p className="text-gray-600">
               {new Date().toLocaleDateString('en-US', { 
@@ -162,8 +160,8 @@ const Dashboard = () => {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
             </svg>
           </div>
-          <h3 className="text-xl font-semibold text-gray-800 mb-2">No Classes Today</h3>
-          <p className="text-gray-600">No classes are scheduled for today in your department.</p>
+          <h3 className="text-xl font-semibold text-gray-800 mb-2">No Classes Assigned Today</h3>
+          <p className="text-gray-600">No classes have been assigned to you for today.</p>
         </div>
       ) : stats.pendingVerification > 0 ? (
         <div className="bg-yellow-50 border-l-4 border-yellow-400 text-yellow-800 p-4 rounded-lg shadow-sm">
@@ -187,7 +185,7 @@ const Dashboard = () => {
             </svg>
             <div>
               <p className="font-medium">Great job!</p>
-              <p className="text-sm mt-1">All classes have been verified for today.</p>
+              <p className="text-sm mt-1">All assigned classes have been verified for today.</p>
             </div>
           </div>
         </div>

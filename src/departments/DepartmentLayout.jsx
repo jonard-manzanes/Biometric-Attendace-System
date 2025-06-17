@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Home, Users, Calendar, FileText, LogOut, Menu } from "lucide-react";
+import { Home, Users, Calendar, FileText, LogOut, Menu, ClipboardList, CheckCircle } from "lucide-react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../firebaseConfig";
@@ -142,6 +142,21 @@ export default function DepartmentLayout() {
               text="Instructors"
               active={currentPage === "instructors"}
               onClick={() => handleNavigate("instructors")}
+              sidebarOpen={sidebarOpen}
+            />
+
+            <SidebarLink
+              icon={<ClipboardList size={20} />}
+              text="Tasking Staff"
+              active={currentPage === "tasking-staff"}
+              onClick={() => handleNavigate("tasking-staff")}
+              sidebarOpen={sidebarOpen}
+            />
+            <SidebarLink
+              icon={<CheckCircle size={20} />}
+              text="Verified Classes"
+              active={currentPage === "verified-classes"}
+              onClick={() => handleNavigate("verified-classes")}
               sidebarOpen={sidebarOpen}
             />
             

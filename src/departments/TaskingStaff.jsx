@@ -14,18 +14,6 @@ const TaskingStaff = () => {
   const [sortConfig, setSortConfig] = useState({ key: 'className', direction: 'ascending' });
   const [expandedClass, setExpandedClass] = useState(null);
 
-  // Function to convert 24-hour time to 12-hour format with AM/PM
-  const formatTimeTo12Hour = (timeString) => {
-    if (!timeString) return '';
-    
-    const [hours, minutes] = timeString.split(':');
-    const hourInt = parseInt(hours, 10);
-    const suffix = hourInt >= 12 ? 'PM' : 'AM';
-    const hour12 = hourInt % 12 || 12; // Convert 0 to 12 for 12 AM
-    
-    return `${hour12}:${minutes} ${suffix}`;
-  };
-
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
@@ -107,16 +95,7 @@ const TaskingStaff = () => {
 
   const getClassSchedule = (cls) => {
     const day = format(new Date(selectedDate), 'EEEE');
-    const schedule = cls.schedule?.find(s => s.day === day);
-    
-    if (schedule) {
-      return {
-        ...schedule,
-        start12Hour: formatTimeTo12Hour(schedule.start),
-        end12Hour: formatTimeTo12Hour(schedule.end)
-      };
-    }
-    return null;
+    return cls.schedule?.find(s => s.day === day);
   };
 
   const requestSort = (key) => {
@@ -358,7 +337,7 @@ const TaskingStaff = () => {
                             <div className="flex items-center">
                               <Clock className="text-gray-400 mr-2" size={16} />
                               <span className="text-sm text-gray-900">
-                                {schedule.start12Hour} - {schedule.end12Hour}
+                                {schedule.start} - {schedule.end}
                               </span>
                             </div>
                           ) : (
